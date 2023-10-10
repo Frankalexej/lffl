@@ -5,7 +5,7 @@ src_ = root_ + "/src/"
 train_audio_ = src_ + "train-clean-100-audio/"
 train_tg_ = src_ + "train-clean-100-tg/"
 train_cut_audio_ = src_ + "train-clean-100-ca/"  # cut audio, ideally following structure of original audio
-dev_cut_audio_ = src_ + "dev-clean-ca/"
+train_cut_guide_ = src_ + "train-clean-100-cg/"  # cut audio, ideally following structure of original audio
 
 
 
