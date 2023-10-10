@@ -1,7 +1,5 @@
-from praatio import textgrid
 import pandas as pd
 import os
-from praatio import textgrid
 
 from paths import *
 from misc_tools import PathUtils as PU
