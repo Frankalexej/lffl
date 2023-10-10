@@ -10,7 +10,7 @@ Low to Full Frequency Learning (lffl)
 4. run python paths.py to set up src directories
 5. preproc_ prefixed files are used in preprocessing
 6. misc_ prefixed files are other utils
-7. aaa
+7. debug_ prefixed files are for development
 
 
 
@@ -18,3 +18,9 @@ Low to Full Frequency Learning (lffl)
 1. The phonetic aligment (&transcription) is using [ARPABET](https://en.wikipedia.org/wiki/ARPABET), with alphabet (combination)s marking sounds and numbers noting stress. 
 
 2. We can just leave the structure of the dataset as it is after cutting. Since it will just change the path of files, it won't really affect the reading efficiency during training. 
+
+3. Ideaology for combining small files into one:   
+    - Loading time using pickle: 55.0732 seconds
+    - Loading time from individual files: 181.1897 seconds
+    - This poses the question of whether we really need to cut them (😢)
+4. aaa

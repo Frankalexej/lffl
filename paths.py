@@ -7,6 +7,8 @@ train_tg_ = src_ + "train-clean-100-tg/"
 train_cut_audio_ = src_ + "train-clean-100-ca/"  # cut audio, ideally following structure of original audio
 train_cut_guide_ = src_ + "train-clean-100-cg/"  # cut audio, ideally following structure of original audio
 
+debug_ = src_ + "debug/"
+
 
 
 def mk(dir): 
