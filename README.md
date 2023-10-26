@@ -13,6 +13,9 @@ Low to Full Frequency Learning (lffl)
 7. debug_ prefixed files are for development
 
 
+## Preprocessing
+1. 
+
 
 ## Frank's Notes
 1. The phonetic aligment (&transcription) is using [ARPABET](https://en.wikipedia.org/wiki/ARPABET), with alphabet (combination)s marking sounds and numbers noting stress. 
@@ -22,5 +25,5 @@ Low to Full Frequency Learning (lffl)
 3. Ideaology for combining small files into one:   
     - Loading time using pickle: 55.0732 seconds
     - Loading time from individual files: 181.1897 seconds
-    - This poses the question of whether we really need to cut them (😢)
+    - This poses the question of whether we really need to cut them (😢) -> not really that important though. Let's stick to cutting. (Because we have multiprocessing during reading)
 4. aaa

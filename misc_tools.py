@@ -7,6 +7,10 @@ class PathUtils:
     @staticmethod
     def path_exist(path): 
         return os.path.exists(path)
+    
+    @staticmethod
+    def path_isdir(path): 
+        return os.path.isdir(path)
 
     @staticmethod
     def mk(dir): 
@@ -61,3 +65,19 @@ class MyAudio:
     @staticmethod
     def play_audio_np(waveform, sample_rate):
         display(Audio(waveform[0], rate=sample_rate))
+
+
+class AudioCut: 
+    @staticmethod
+    def time2frame(time_sec, rate): 
+        # Calculate the number of elapsed samples
+        return int(round(time_sec * rate))
+    
+    @staticmethod
+    def idx2text(idx, fill_num): 
+        return str(idx).zfill(fill_num)
+    
+    @staticmethod
+    def cut_name_gen(name, idx, fill_num): 
+        return "{name}-{idx}".format(name=name, 
+                                     idx=AudioCut.idx2text(idx, fill_num))

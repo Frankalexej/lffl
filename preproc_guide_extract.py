@@ -80,4 +80,4 @@ def extract_from_tgs(src_path, target_path):
 
 
 if __name__ == "__main__": 
-    extract_from_tgs(train_tg_, train_cut_audio_)
+    extract_from_tgs(train_tg_, train_cut_guide_)

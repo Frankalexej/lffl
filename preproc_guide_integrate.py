@@ -44,4 +44,4 @@ def integrate_guides(src_path, target_filename):
 
 
 if __name__ == "__main__": 
-    integrate_guides(train_cut_audio_, os.path.join(src_, "guide.csv"))
+    integrate_guides(train_cut_guide_, os.path.join(src_, "guide.csv"))
