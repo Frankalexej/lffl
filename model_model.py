@@ -1,0 +1,91 @@
+import torch
+import torch.nn as nn
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+import torch.nn.functional as F
+import torch.optim as optim
+from torch.utils.data import Dataset
+from torch.optim.lr_scheduler import StepLR
+
+from model_configs import ModelDimConfigs
+from model_dataset import *
+
+class SelfPackLSTM(nn.Module): 
+    """
+    This is a packing class that includes pack_padded_sequence 
+    and pad_packed_sequence into the RNN class (LSTM)
+    The output is the last items of the batch. So (B, L, I) -> (B, L, O) -> (B, O) 
+    """
+    def __init__(self, in_size, out_size, num_layers=1):
+        super(SelfPackLSTM, self).__init__()
+        # get resnet model
+        self.rnn = nn.LSTM(input_size=in_size, 
+                           output_size=out_size, 
+                           num_layers=num_layers, 
+                           batch_first=True)
+        
+    
+    def forward(self, x, x_lens): 
+        x = pack_padded_sequence(x, x_lens, 
+                                 batch_first=True, 
+                                 enforce_sorted=False)
+        
+        x, (hn, cn) = self.rnn(x)   # (B, L, I) -> (B, L, O)
+        # x, _ = pad_packed_sequence(x, batch_first=True)
+        x = extract_last_from_packed(x, x_lens) # extract the last elements
+        return x
+
+class SiameseNetwork(nn.Module):
+    """
+        Siamese network for phone similarity prediction.
+        The network is composed of two identical networks, one for each input.
+        The output of each network is concatenated and passed to a linear layer. 
+        The output of the linear layer passed through a sigmoid function.
+        `"FaceNet" <https://arxiv.org/pdf/1503.03832.pdf>`_ is a variant of the Siamese network.
+        In addition, we aren't using `TripletLoss` as the MNIST dataset is simple, so `BCELoss` can do the trick. [? might try later]
+    """
+    def __init__(self, dimconf:ModelDimConfigs, num_layers=2):
+        super(SiameseNetwork, self).__init__()
+        # get resnet model
+        self.rnn = SelfPackLSTM(in_size=dimconf.rnn_in_size, 
+                                out_size=dimconf.rnn_out_size, 
+                                num_layers=num_layers)
+
+        self.fc = nn.Sequential(
+            nn.Linear(dimconf.lin_in_size_1 * 2, dimconf.lin_out_size_1),
+            nn.ReLU(),
+            nn.Linear(dimconf.lin_in_size_2, dimconf.lin_out_size_2),
+        )
+
+        self.sigmoid = nn.Sigmoid()
+
+        # initialize the weights
+        self.rnn.apply(self.init_weights)
+        self.fc.apply(self.init_weights)
+        
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.01)
+
+    def forward_once(self, x):
+        # get through the rnn
+        output = self.rnn(x)
+        # output = output.view(output.size()[0], -1)
+        return output
+
+    def forward(self, input1, input2):
+        # get two images' features
+        output1 = self.forward_once(input1)
+        output2 = self.forward_once(input2)
+
+        # concatenate both images' features
+        # (B, F) -> (B, 2F)
+        output = torch.cat((output1, output2), 1)
+
+        # pass the concatenation to the linear layers
+        output = self.fc(output)
+
+        # pass the out of the linear layers to sigmoid layer
+        output = self.sigmoid(output)
+        
+        return output
