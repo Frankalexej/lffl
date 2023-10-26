@@ -79,5 +79,11 @@ class AudioCut:
     
     @staticmethod
     def cut_name_gen(name, idx, fill_num): 
-        return "{name}-{idx}".format(name=name, 
+        return "{name}-{idx}.flac".format(name=name, 
                                      idx=AudioCut.idx2text(idx, fill_num))
+    
+    @staticmethod
+    def solve_name(name): 
+        # bare name, no extension
+        # 19-198-0037 (example)
+        return tuple(name.split("-"))

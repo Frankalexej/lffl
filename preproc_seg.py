@@ -4,7 +4,8 @@ from praatio import textgrid
 import pandas as pd
 from paths import *
 from misc_tools import PathUtils as PU, AudioCut
-from misc_progress_bar import draw_progress_bar
+# from misc_progress_bar import draw_progress_bar
+from misc_multiprocessing import *
 
 # xxx_ means xxx_path (self-defined abbr)
 def segment_and_extract_sentence(au_, tg_, ca_, cg_, name, save_small=True): 
@@ -22,6 +23,11 @@ def segment_and_extract_sentence(au_, tg_, ca_, cg_, name, save_small=True):
     endTime = []    # end time of segment
     nSample = []    # number of samples in recording [not calculated]
 
+    speaker, rec, sentence = AudioCut.solve_name(name)
+
+    ca_name_ = os.path.join(ca_, sentence)
+    PU.mk(ca_name_)
+
     for idx, segment_interval in enumerate(entries): 
         starttime = segment_interval.start
         endtime = segment_interval.end
@@ -32,7 +38,7 @@ def segment_and_extract_sentence(au_, tg_, ca_, cg_, name, save_small=True):
         end_sample = AudioCut.time2frame(endtime, sample_rate)
         cut_audio = waveform[:, start_sample:end_sample]
 
-        ca_file = os.path.join(ca_, AudioCut.cut_name_gen(name, idx, 4))
+        ca_file = os.path.join(ca_name_, AudioCut.cut_name_gen(name, idx, 4))
         torchaudio.save(ca_file, cut_audio, sample_rate)
 
         segment.append(segment_interval.label)
@@ -59,7 +65,7 @@ def segment_and_extract_sentence(au_, tg_, ca_, cg_, name, save_small=True):
     return data
 
 
-def segment_and_extract(dir_au, dir_tg, dir_ca, dir_cg): 
+def segment_and_extract(work_list, dir_au, dir_tg, dir_ca, dir_cg): 
     """
     This function reads textgrid files, and according to the 
     interval boundaries cut the corresponding recordings into small audios. 
@@ -70,9 +76,11 @@ def segment_and_extract(dir_au, dir_tg, dir_ca, dir_cg):
                 and PU.path_exist(dir_ca) \
                 and PU.path_exist(dir_cg))  # check dir existence
     
-    total_speakers = len(os.listdir(dir_tg))
+    # total_speakers = len(work_list)
+    # sorted(os.listdir(dir_au), key=str.casefold)
 
-    for idx, speaker_ in enumerate(sorted(os.listdir(dir_au), key=str.casefold)): 
+    for speaker_ in work_list: 
+        print(speaker_)
         # train-clean-100-audio/[19]/198/19-198-0000.flac
         audio_speaker_, tg_speaker_ = os.path.join(dir_au, speaker_), os.path.join(dir_tg, speaker_)
         if not (PU.path_isdir(audio_speaker_) or PU.path_isdir(tg_speaker_)): 
@@ -90,6 +98,8 @@ def segment_and_extract(dir_au, dir_tg, dir_ca, dir_cg):
             PU.mk(cg_speaker_rec_)
 
             for sentence in sorted(os.listdir(audio_speaker_rec_), key=str.casefold): 
+                if not sentence.endswith(".flac"): 
+                    continue
                 # here we loop through each textgrid file
                 data = segment_and_extract_sentence(
                     au_=audio_speaker_rec_, 
@@ -98,7 +108,9 @@ def segment_and_extract(dir_au, dir_tg, dir_ca, dir_cg):
                     cg_=cg_speaker_rec_, 
                     name=os.path.splitext(sentence)[0]
                 )
-        draw_progress_bar(idx, total_speakers)
+        # draw_progress_bar(idx, total_speakers)
 
 if __name__ == "__main__": 
-    segment_and_extract(train_audio_, train_tg_, train_cut_audio_, train_cut_guide_)
+    run_mp(segment_and_extract, os.listdir(train_audio_), 32, *(train_audio_, train_tg_, train_cut_audio_, train_cut_guide_))
+    # segment_and_extract(os.listdir(train_audio_), train_audio_, train_tg_, train_cut_audio_, train_cut_guide_)
+    # segment_and_extract(try_audio_, try_tg_, try_cut_audio_, try_cut_guide_)

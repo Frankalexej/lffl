@@ -14,7 +14,11 @@ Low to Full Frequency Learning (lffl)
 
 
 ## Preprocessing
-1. 
+1. preproc_seg.py: run this file and get the continuous recordings cut into phones  
+2. preproc_guide_integrate.py: run and integrate the guide files into one large guideline  
+3. preproc_guide_mod.py: run and make additional changes to the guide. You can self-define any change because this is post-hoc  
+- preproc_guide_extract.py: use it if you only want to exract the metadata but not touch the recordings
+
 
 
 ## Frank's Notes

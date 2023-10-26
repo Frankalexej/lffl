@@ -36,7 +36,7 @@ def integrate_guides(src_path, target_filename):
         draw_progress_bar(idx, total_speakers)
     
     # post-hoc changes
-    total_df['segment_nostress'] = total_df['segment'].apply(remove_stress)
+    # total_df['segment_nostress'] = total_df['segment'].apply(remove_stress)
 
     total_df.to_csv(target_filename, index=False)
     return
