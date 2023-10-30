@@ -1,6 +1,7 @@
 # Here we put some functions / classes as tool
 # Let's make the code better structured! 
 import os
+import datetime
 from IPython.display import Audio, display
 
 class PathUtils: 
@@ -87,3 +88,8 @@ class AudioCut:
         # bare name, no extension
         # 19-198-0037 (example)
         return tuple(name.split("-"))
+
+# START
+def get_timestamp():
+    # for model save
+    return datetime.datetime.now().strftime("%m%d%H%M%S")   # timestamp ignores year and second, not really needed. 

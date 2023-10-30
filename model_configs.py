@@ -16,3 +16,7 @@ class ModelDimConfigs:
         self.lin_out_size_1 = lin_in_size_2
         self.lin_in_size_2 = lin_in_size_2
         self.lin_out_size_2 = lin_out_size_2
+
+
+class TrainingConfigs: 
+    BATCH_SIZE = 128

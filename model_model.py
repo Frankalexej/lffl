@@ -19,7 +19,7 @@ class SelfPackLSTM(nn.Module):
         super(SelfPackLSTM, self).__init__()
         # get resnet model
         self.rnn = nn.LSTM(input_size=in_size, 
-                           output_size=out_size, 
+                           hidden_size=out_size, 
                            num_layers=num_layers, 
                            batch_first=True)
         
@@ -67,16 +67,18 @@ class SiameseNetwork(nn.Module):
             torch.nn.init.xavier_uniform_(m.weight)
             m.bias.data.fill_(0.01)
 
-    def forward_once(self, x):
+    def forward_once(self, x, x_lens):
         # get through the rnn
-        output = self.rnn(x)
+        output = self.rnn(x, x_lens)
         # output = output.view(output.size()[0], -1)
         return output
 
-    def forward(self, input1, input2):
+    def forward(self, inputs, inputs_lens):
+        input1, input2 = inputs
+        input1_lens, input2_lens = inputs_lens
         # get two images' features
-        output1 = self.forward_once(input1)
-        output2 = self.forward_once(input2)
+        output1 = self.forward_once(input1, input1_lens)
+        output2 = self.forward_once(input2, input2_lens)
 
         # concatenate both images' features
         # (B, F) -> (B, 2F)
