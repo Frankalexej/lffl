@@ -34,6 +34,33 @@ class SelfPackLSTM(nn.Module):
         x = extract_last_from_packed(x, x_lens) # extract the last elements
         return x
 
+
+class SelfPackLSTMNetron(nn.Module): 
+    """
+    This is a packing class that includes pack_padded_sequence 
+    and pad_packed_sequence into the RNN class (LSTM)
+    The output is the last items of the batch. So (B, L, I) -> (B, L, O) -> (B, O) 
+    """
+    def __init__(self, in_size, out_size, num_layers=1):
+        super(SelfPackLSTMNetron, self).__init__()
+        # get resnet model
+        self.rnn = nn.LSTM(input_size=in_size, 
+                           hidden_size=out_size, 
+                           num_layers=num_layers, 
+                           batch_first=True)
+        
+    
+    def forward(self, x, x_lens): 
+        x = pack_padded_sequence(x, x_lens, 
+                                 batch_first=True, 
+                                 enforce_sorted=False)
+        
+        x, (hn, cn) = self.rnn(x)   # (B, L, I) -> (B, L, O)
+        x, _ = pad_packed_sequence(x, batch_first=True)
+        x = x[:, -1, :]
+        # x = extract_last_from_packed(x, x_lens) # extract the last elements
+        return x
+
 class SiameseNetwork(nn.Module):
     """
         Siamese network for phone similarity prediction.
@@ -91,3 +118,48 @@ class SiameseNetwork(nn.Module):
         output = self.sigmoid(output)
         
         return output
+
+
+
+
+
+    def __getitem__(self, index, num_classes):
+        # pick some random class for the first image
+        selected_class = random.randint(0, num_classes)
+        # pick a random index for the first image in the grouped indices based of the label
+        # of the class
+        random_index_1 = random.randint(0, self.grouped_examples[selected_class].shape[0]-1)
+        # pick the index to get the first image
+        index_1 = self.grouped_examples[selected_class][random_index_1]
+        # get the first image
+        sound_1 = self.data[index_1].clone().float()
+        # same class
+        if index % 2 == 0:
+            # pick a random index for the second image
+            random_index_2 = random.randint(0, self.grouped_examples[selected_class].shape[0]-1)
+            # ensure that the index of the second image isn't the same as the first image
+            while random_index_2 == random_index_1:
+                random_index_2 = random.randint(0, self.grouped_examples[selected_class].shape[0]-1)
+            # pick the index to get the second image
+            index_2 = self.grouped_examples[selected_class][random_index_2]
+            # get the second image
+            sound_2 = self.data[index_2].clone().float()
+            # set the label for this example to be positive (1)
+            target = torch.tensor(1, dtype=torch.float)
+        # different class
+        else:
+            # pick a random class
+            other_selected_class = random.randint(0, num_classes)
+            # ensure that the class of the second image isn't the same as the first image
+            while other_selected_class == selected_class:
+                other_selected_class = random.randint(0, num_classes) 
+            # pick a random index for the second image in the grouped indices based of the label
+            # of the class
+            random_index_2 = random.randint(0, self.grouped_examples[other_selected_class].shape[0]-1)
+            # pick the index to get the second image
+            index_2 = self.grouped_examples[other_selected_class][random_index_2]
+            # get the second image
+            sound_2 = self.data[index_2].clone().float()
+            # set the label for this example to be negative (0)
+            target = torch.tensor(0, dtype=torch.float)
+        return sound_1, sound_2, target
