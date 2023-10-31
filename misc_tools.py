@@ -2,6 +2,7 @@
 # Let's make the code better structured! 
 import os
 import datetime
+import pandas as pd
 from IPython.display import Audio, display
 
 class PathUtils: 
@@ -79,15 +80,24 @@ class AudioCut:
         return str(idx).zfill(fill_num)
     
     @staticmethod
-    def cut_name_gen(name, idx, fill_num): 
-        return "{name}-{idx}.flac".format(name=name, 
-                                     idx=AudioCut.idx2text(idx, fill_num))
+    def cut_name_gen(name, idx, fill_num, bare=False): 
+        if bare: 
+            return name + "-" + AudioCut.idx2text(idx, fill_num)
+        return name + "-" + AudioCut.idx2text(idx, fill_num) + ".flac"
     
     @staticmethod
     def solve_name(name): 
         # bare name, no extension
         # 19-198-0037 (example)
         return tuple(name.split("-"))
+
+    @staticmethod
+    def record2filepath(record): 
+        # record is a row
+        sentence = record["file"]
+        idx = AudioCut.idx2text(record["id"], fill_num=4)
+
+        return sentence.replace("-", "/") + "/" + sentence + "-" + idx + ".flac"
 
 # START
 def get_timestamp():

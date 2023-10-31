@@ -15,6 +15,8 @@ train_cut_guide_ = src_ + "train-clean-100-cg/"  # cut guide, ideally following 
 
 debug_ = src_ + "debug/"
 
+model_save_ = root_ + "model_save/"
+
 
 
 def mk(dir): 

@@ -20,3 +20,9 @@ class ModelDimConfigs:
 
 class TrainingConfigs: 
     BATCH_SIZE = 128
+
+    REC_SAMPLE_RATE = 16000
+    N_FFT = 400
+    N_MELS = 64
+    
+    LOADER_WORKER = 16

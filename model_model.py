@@ -7,7 +7,17 @@ from torch.utils.data import Dataset
 from torch.optim.lr_scheduler import StepLR
 
 from model_configs import ModelDimConfigs
-from model_dataset import *
+
+def extract_last_from_packed(packed, lengths:torch.Tensor): 
+    sum_batch_sizes = torch.cat((
+        torch.zeros(2, dtype=torch.int64),
+        torch.cumsum(packed.batch_sizes, 0)
+    ))
+    sorted_lengths = lengths[packed.sorted_indices]
+    last_seq_idxs = sum_batch_sizes[sorted_lengths] + torch.arange(lengths.size(0))
+    last_seq_items = packed.data[last_seq_idxs]
+    last_seq_items = last_seq_items[packed.unsorted_indices]
+    return last_seq_items
 
 class SelfPackLSTM(nn.Module): 
     """
@@ -118,48 +128,40 @@ class SiameseNetwork(nn.Module):
         output = self.sigmoid(output)
         
         return output
+    
 
+class JudgeNetwork(nn.Module):
+    def __init__(self, dimconf:ModelDimConfigs, num_layers=2):
+        super(JudgeNetwork, self).__init__()
+        self.rnn = SelfPackLSTM(in_size=dimconf.rnn_in_size, 
+                                out_size=dimconf.rnn_out_size, 
+                                num_layers=num_layers)
 
+        self.fc = nn.Sequential(
+            nn.Linear(dimconf.lin_in_size_1, dimconf.lin_out_size_1),
+            nn.ReLU(),
+            nn.Linear(dimconf.lin_in_size_2, dimconf.lin_out_size_2),
+        )
 
+        self.sigmoid = nn.Sigmoid()
 
+        # initialize the weights
+        self.rnn.apply(self.init_weights)
+        self.fc.apply(self.init_weights)
+        
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.01)
 
-    def __getitem__(self, index, num_classes):
-        # pick some random class for the first image
-        selected_class = random.randint(0, num_classes)
-        # pick a random index for the first image in the grouped indices based of the label
-        # of the class
-        random_index_1 = random.randint(0, self.grouped_examples[selected_class].shape[0]-1)
-        # pick the index to get the first image
-        index_1 = self.grouped_examples[selected_class][random_index_1]
-        # get the first image
-        sound_1 = self.data[index_1].clone().float()
-        # same class
-        if index % 2 == 0:
-            # pick a random index for the second image
-            random_index_2 = random.randint(0, self.grouped_examples[selected_class].shape[0]-1)
-            # ensure that the index of the second image isn't the same as the first image
-            while random_index_2 == random_index_1:
-                random_index_2 = random.randint(0, self.grouped_examples[selected_class].shape[0]-1)
-            # pick the index to get the second image
-            index_2 = self.grouped_examples[selected_class][random_index_2]
-            # get the second image
-            sound_2 = self.data[index_2].clone().float()
-            # set the label for this example to be positive (1)
-            target = torch.tensor(1, dtype=torch.float)
-        # different class
-        else:
-            # pick a random class
-            other_selected_class = random.randint(0, num_classes)
-            # ensure that the class of the second image isn't the same as the first image
-            while other_selected_class == selected_class:
-                other_selected_class = random.randint(0, num_classes) 
-            # pick a random index for the second image in the grouped indices based of the label
-            # of the class
-            random_index_2 = random.randint(0, self.grouped_examples[other_selected_class].shape[0]-1)
-            # pick the index to get the second image
-            index_2 = self.grouped_examples[other_selected_class][random_index_2]
-            # get the second image
-            sound_2 = self.data[index_2].clone().float()
-            # set the label for this example to be negative (0)
-            target = torch.tensor(0, dtype=torch.float)
-        return sound_1, sound_2, target
+    def forward(self, x, x_lens):
+        output = self.rnn(x, x_lens)
+
+        # pass the concatenation to the linear layers
+        output = self.fc(output)
+
+        # pass the out of the linear layers to sigmoid layer
+        output = self.sigmoid(output)
+        
+        return output
+    
