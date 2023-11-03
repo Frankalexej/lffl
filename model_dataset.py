@@ -8,6 +8,7 @@ import os
 import pickle
 
 from misc_tools import AudioCut
+from model_filter import XpassFilter
 
 class DS_Tools:
     @ staticmethod
@@ -75,10 +76,11 @@ class SingleRecDataset(Dataset):
 
 
 class MelSpecTransform(nn.Module): 
-    def __init__(self, sample_rate, n_fft=400, n_mels=64): 
+    def __init__(self, sample_rate, n_fft=400, n_mels=64, filter=None): 
         super().__init__()
         self.sample_rate = sample_rate
         n_stft = int((n_fft//2) + 1)
+        self.filter = filter
         self.transform = torchaudio.transforms.MelSpectrogram(sample_rate, n_mels=n_mels, n_fft=n_fft)
         self.inverse_mel = torchaudio.transforms.InverseMelScale(sample_rate=sample_rate, n_mels=n_mels, n_stft=n_stft)
         self.grifflim = torchaudio.transforms.GriffinLim(n_fft=n_fft)
@@ -86,6 +88,9 @@ class MelSpecTransform(nn.Module):
     
     def forward(self, waveform): 
         # transform to mel_spectrogram
+        if self.filter: 
+            waveform = self.filter(waveform, self.sample_rate)
+
         mel_spec = self.transform(waveform)  # (channel, n_mels, time)
         mel_spec = mel_spec.squeeze()
         mel_spec = mel_spec.permute(1, 0) # (F, L) -> (L, F)
