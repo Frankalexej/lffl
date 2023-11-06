@@ -30,6 +30,21 @@ class DS_Tools:
         except Exception as e:
             print(f"An error occurred while reading the list: {e}")
             return None
+        
+class TokenMap: 
+    def __init__(self, token_list):  
+        self.token2idx = {element: index for index, element in enumerate(token_list)}
+        self.idx2token = {index: element for index, element in enumerate(token_list)}
+    
+    def encode(self, token): 
+        return self.token2idx[token]
+    
+    def decode(self, idx): 
+        return self.idx2token[idx]
+    
+    def token_num(self): 
+        return len(self.token2idx)
+
 
 class SingleRecDataset(Dataset): 
     def __init__(self, src_dir, guide_, transform=None): 
@@ -46,6 +61,8 @@ class SingleRecDataset(Dataset):
         self.seg_set = seg_col.tolist()
         self.src_dir = src_dir
         self.transform = transform
+        self.mapper = TokenMap(seg_col.unique().tolist())
+        
 
     def __len__(self): 
         return len(self.dataset)
@@ -64,11 +81,12 @@ class SingleRecDataset(Dataset):
             data = self.transform(data)
         seg = self.seg_set[idx]
 
-        return data, seg
+        return data, self.mapper.encode(seg)
 
     @staticmethod
-    def collate_fn(xx, seg):
+    def collate_fn(data):
         # only working for one data at the moment
+        xx, seg = zip(*data)
         batch_first = True
         x_lens = [len(x) for x in xx]
         xx_pad = pad_sequence(xx, batch_first=batch_first, padding_value=0)

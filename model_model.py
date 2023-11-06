@@ -8,16 +8,34 @@ from torch.optim.lr_scheduler import StepLR
 
 from model_configs import ModelDimConfigs
 
-def extract_last_from_packed(packed, lengths:torch.Tensor): 
-    sum_batch_sizes = torch.cat((
-        torch.zeros(2, dtype=torch.int64),
-        torch.cumsum(packed.batch_sizes, 0)
-    ))
-    sorted_lengths = lengths[packed.sorted_indices]
-    last_seq_idxs = sum_batch_sizes[sorted_lengths] + torch.arange(lengths.size(0))
-    last_seq_items = packed.data[last_seq_idxs]
-    last_seq_items = last_seq_items[packed.unsorted_indices]
-    return last_seq_items
+class LastElementExtractor(nn.Module): 
+    def __init__(self): 
+        super(LastElementExtractor, self).__init__()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.cpu = torch.device('cpu')
+    
+    def forward(self, packed, lengths): 
+        lengths = torch.tensor(lengths, device=self.device)
+        sum_batch_sizes = torch.cat((
+            torch.zeros(2, dtype=torch.int64, device=self.device),
+            torch.cumsum(packed.batch_sizes, 0).to(self.device)
+        ))
+        sorted_lengths = lengths[packed.sorted_indices]
+        last_seq_idxs = sum_batch_sizes[sorted_lengths] + torch.arange(lengths.size(0), device=self.device)
+        last_seq_items = packed.data[last_seq_idxs]
+        last_seq_items = last_seq_items[packed.unsorted_indices]
+        return last_seq_items
+
+# def extract_last_from_packed(packed, lengths): 
+#     sum_batch_sizes = torch.cat((
+#         torch.zeros(2, dtype=torch.int64),
+#         torch.cumsum(packed.batch_sizes, 0)
+#     ))
+#     sorted_lengths = lengths[packed.sorted_indices]
+#     last_seq_idxs = sum_batch_sizes[sorted_lengths] + torch.arange(lengths.size(0))
+#     last_seq_items = packed.data[last_seq_idxs]
+#     last_seq_items = last_seq_items[packed.unsorted_indices]
+#     return last_seq_items
 
 class SelfPackLSTM(nn.Module): 
     """
@@ -33,6 +51,8 @@ class SelfPackLSTM(nn.Module):
                            num_layers=num_layers, 
                            batch_first=True)
         
+        self.extract = LastElementExtractor()
+        
     
     def forward(self, x, x_lens): 
         x = pack_padded_sequence(x, x_lens, 
@@ -41,7 +61,7 @@ class SelfPackLSTM(nn.Module):
         
         x, (hn, cn) = self.rnn(x)   # (B, L, I) -> (B, L, O)
         # x, _ = pad_packed_sequence(x, batch_first=True)
-        x = extract_last_from_packed(x, x_lens) # extract the last elements
+        x = self.extract(x, x_lens) # extract the last elements
         return x
 
 
@@ -143,7 +163,7 @@ class JudgeNetwork(nn.Module):
             nn.Linear(dimconf.lin_in_size_2, dimconf.lin_out_size_2),
         )
 
-        self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax(dim=1)
 
         # initialize the weights
         self.rnn.apply(self.init_weights)
@@ -161,7 +181,13 @@ class JudgeNetwork(nn.Module):
         output = self.fc(output)
 
         # pass the out of the linear layers to sigmoid layer
-        output = self.sigmoid(output)
+        # output = self.sigmoid(output)
         
         return output
+    
+    def predict_on_output(self, output): 
+        output = self.softmax(output)
+        preds = torch.argmax(output, dim=1)
+        return preds
+
     
