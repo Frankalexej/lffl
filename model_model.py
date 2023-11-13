@@ -110,7 +110,10 @@ class SiameseNetwork(nn.Module):
         self.fc = nn.Sequential(
             nn.Linear(dimconf.lin_in_size_1 * 2, dimconf.lin_out_size_1),
             nn.ReLU(),
+            nn.Dropout(p=0.5), 
             nn.Linear(dimconf.lin_in_size_2, dimconf.lin_out_size_2),
+            # nn.ReLU(),
+            # nn.Dropout(p=0.5), 
         )
 
         self.sigmoid = nn.Sigmoid()
@@ -121,7 +124,7 @@ class SiameseNetwork(nn.Module):
         
     def init_weights(self, m):
         if isinstance(m, nn.Linear):
-            torch.nn.init.xavier_uniform_(m.weight)
+            torch.nn.init.orthogonal_(m.weight)
             m.bias.data.fill_(0.01)
 
     def forward_once(self, x, x_lens):
@@ -148,6 +151,10 @@ class SiameseNetwork(nn.Module):
         output = self.sigmoid(output)
         
         return output
+
+    def predict_on_output(self, output): 
+        preds = (torch.tensor(output) >= 0.5).type(torch.float32)
+        return preds
     
 
 class JudgeNetwork(nn.Module):
@@ -160,7 +167,10 @@ class JudgeNetwork(nn.Module):
         self.fc = nn.Sequential(
             nn.Linear(dimconf.lin_in_size_1, dimconf.lin_out_size_1),
             nn.ReLU(),
+            nn.Dropout(p=0.5), 
             nn.Linear(dimconf.lin_in_size_2, dimconf.lin_out_size_2),
+            nn.ReLU(),
+            nn.Dropout(p=0.5),
         )
 
         self.softmax = nn.Softmax(dim=1)

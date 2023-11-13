@@ -98,6 +98,14 @@ class AudioCut:
         idx = AudioCut.idx2text(record["id"], fill_num=4)
 
         return sentence.replace("-", "/") + "/" + sentence + "-" + idx + ".flac"
+    
+    @staticmethod
+    def filename_id2filepath(filename, idx): 
+        # record is a row
+        sentence = filename
+        idx = AudioCut.idx2text(idx, fill_num=4)
+
+        return sentence.replace("-", "/") + "/" + sentence + "-" + idx + ".flac"
 
 # START
 def get_timestamp():
