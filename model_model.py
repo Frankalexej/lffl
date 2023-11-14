@@ -201,3 +201,45 @@ class JudgeNetwork(nn.Module):
         return preds
 
     
+class StressNetwork(nn.Module):
+    def __init__(self, dimconf:ModelDimConfigs, num_layers=2):
+        super(StressNetwork, self).__init__()
+        self.rnn = SelfPackLSTM(in_size=dimconf.rnn_in_size, 
+                                out_size=dimconf.rnn_out_size, 
+                                num_layers=num_layers)
+
+        self.fc = nn.Sequential(
+            nn.Linear(dimconf.lin_in_size_1, dimconf.lin_out_size_1),
+            nn.ReLU(),
+            nn.Dropout(p=0.5), 
+            nn.Linear(dimconf.lin_in_size_2, dimconf.lin_out_size_2),
+            # nn.ReLU(),
+            # nn.Dropout(p=0.5),
+        )
+
+        # self.softmax = nn.Softmax(dim=1)
+        self.sigmoid = nn.Sigmoid()
+
+        # initialize the weights
+        self.rnn.apply(self.init_weights)
+        self.fc.apply(self.init_weights)
+        
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.01)
+
+    def forward(self, x, x_lens):
+        output = self.rnn(x, x_lens)
+
+        # pass the concatenation to the linear layers
+        output = self.fc(output)
+
+        # pass the out of the linear layers to sigmoid layer
+        output = self.sigmoid(output)
+        
+        return output
+    
+    def predict_on_output(self, output): 
+        preds = (torch.tensor(output) >= 0.5).type(torch.float32)
+        return preds

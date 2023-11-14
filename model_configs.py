@@ -25,4 +25,4 @@ class TrainingConfigs:
     N_FFT = 400
     N_MELS = 64
     
-    LOADER_WORKER = 16
+    LOADER_WORKER = 24

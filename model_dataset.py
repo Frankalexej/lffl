@@ -92,6 +92,52 @@ class SingleRecDataset(Dataset):
         x_lens = [len(x) for x in xx]
         xx_pad = pad_sequence(xx, batch_first=batch_first, padding_value=0)
         return (xx_pad, x_lens), seg
+
+class SingleRecStressDataset(Dataset): 
+    def __init__(self, src_dir, guide_, transform=None): 
+        guide_file = pd.read_csv(guide_)
+
+        guide_file = guide_file[~guide_file["stress_type"].isin(["SNA", "2"])]
+        guide_file = guide_file[guide_file['nSample'] > 400]
+        guide_file = guide_file[guide_file['nSample'] <= 8000]
+
+        path_col = guide_file.apply(AudioCut.record2filepath, axis=1)
+        seg_col = guide_file["stress_type"]
+
+        self.dataset = path_col.tolist()
+        self.seg_set = seg_col.tolist()
+        self.src_dir = src_dir
+        self.transform = transform
+        self.mapper = TokenMap(['0', '1'])
+        
+
+    def __len__(self): 
+        return len(self.dataset)
+
+    def __getitem__(self, idx): 
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        file_name = os.path.join(
+            self.src_dir, 
+            self.dataset[idx]
+        )
+
+        data, sample_rate = torchaudio.load(file_name, normalize=True)
+        if self.transform: 
+            data = self.transform(data)
+        seg = self.seg_set[idx]
+
+        return data, self.mapper.encode(seg)
+
+    @staticmethod
+    def collate_fn(data):
+        # only working for one data at the moment
+        xx, seg = zip(*data)
+        batch_first = True
+        x_lens = [len(x) for x in xx]
+        xx_pad = pad_sequence(xx, batch_first=batch_first, padding_value=0)
+        return (xx_pad, x_lens), seg
     
 
 class PairRecDataset():
