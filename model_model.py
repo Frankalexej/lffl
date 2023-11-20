@@ -156,6 +156,81 @@ class SiameseNetwork(nn.Module):
         preds = (torch.tensor(output) >= 0.5).type(torch.float32)
         return preds
     
+class SiameseNetworkV2(nn.Module):
+    """
+    SiameseNetworkV2 is a class that represents a Siamese Network model for image similarity comparison.
+    This version (V2) of the Siamese Network includes an LSTM layer followed by linear layers and a sigmoid activation function.
+
+    Args:
+        dimconf (ModelDimConfigs): An object containing the dimension configurations for the model.
+        num_layers (int): The number of layers in the LSTM. Default is 2.
+
+    Attributes:
+        rnn (SelfPackLSTM): The LSTM layer for extracting features from the input images.
+        fc (nn.Sequential): The sequential container for the linear layers.
+        sigmoid (nn.Sigmoid): The sigmoid activation function.
+    """    
+    def __init__(self, dimconf:ModelDimConfigs, num_layers=2):
+        super(SiameseNetworkV2, self).__init__()
+        # get resnet model
+        self.rnn = SelfPackLSTM(in_size=dimconf.rnn_in_size, 
+                                out_size=dimconf.rnn_out_size, 
+                                num_layers=num_layers)
+
+        self.fc = nn.Sequential(
+            # nn.Tanh(),
+            nn.Dropout(p=0.5), 
+            nn.BatchNorm1d(dimconf.lin_in_size_1),
+            nn.Linear(dimconf.lin_in_size_1, dimconf.lin_out_size_1),
+            # nn.Linear(dimconf.lin_in_size_2, dimconf.lin_out_size_2),
+            # nn.ReLU(),
+            # nn.Dropout(p=0.5), 
+        )
+
+        # self.sigmoid = nn.Sigmoid()
+
+        # initialize the weights
+        self.rnn.apply(self.init_weights)
+        self.fc.apply(self.init_weights)
+        
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_normal_(m.weight)
+            m.bias.data.fill_(0.01)
+
+    def forward_once(self, x, x_lens):
+        # get through the rnn
+        output = self.rnn(x, x_lens)
+        output = self.fc(output)
+        # output = output.view(output.size()[0], -1)
+        return output
+
+    def forward(self, inputs, inputs_lens):
+        input1, input2 = inputs
+        input1_lens, input2_lens = inputs_lens
+        # get two images' features
+        output1 = self.forward_once(input1, input1_lens)
+        output2 = self.forward_once(input2, input2_lens)
+
+        # concatenate both images' features
+        # (B, F) -> (B, 2F)
+        # output = torch.cat((output1, output2), 1)
+
+        # pass the concatenation to the linear layers
+        # output = self.fc(output)
+
+        # pass the out of the linear layers to sigmoid layer
+        # output = self.sigmoid(output)
+        
+        return output1, output2
+
+    def predict_on_output(self, output1, output2, threshold=0.5): 
+        euclidean_distance = F.pairwise_distance(output1, output2, keepdim = False)
+        preds = (euclidean_distance >= threshold).type(torch.float32)
+        return preds
+    
+
+
 
 class JudgeNetwork(nn.Module):
     def __init__(self, dimconf:ModelDimConfigs, num_layers=2):

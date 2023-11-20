@@ -7,10 +7,11 @@ import os
 from misc_tools import AudioCut
 
 class PairRecDataset():
-    def __init__(self, aud_dir, log_file, total_number=10000, transform=None):
+    def __init__(self, aud_dir, log_file, list_save_dir, total_number=10000, transform=None):
         # we define a total number so that we can freely adjust the total number of training examples we take hold of.
         # Because we definitely don't use up the whole pair set.
         self.aud_dir = aud_dir
+        self.list_save_dir = list_save_dir
         self.log = pd.read_csv(log_file)
         self.total_number = total_number
         self.transform = transform
@@ -119,7 +120,7 @@ class PairRecDataset():
             self.paired_audio = self.paired_audio._append(new_line, ignore_index=True)
 
         # write to csv
-        self.paired_audio.to_csv(os.path.join(self.aud_dir, "paired_dataset"), index=False)
+        self.paired_audio.to_csv(os.path.join(self.list_save_dir, "paired_dataset.csv"), index=False)
 
     def __len__(self):
         return self.total_number
