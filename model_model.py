@@ -284,15 +284,17 @@ class StressNetwork(nn.Module):
                                 num_layers=num_layers)
 
         self.fc = nn.Sequential(
-            nn.Linear(dimconf.lin_in_size_1, dimconf.lin_out_size_1),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Dropout(p=0.5), 
+            # nn.LayerNorm(dimconf.lin_in_size_1),
+            nn.Linear(dimconf.lin_in_size_1, dimconf.lin_out_size_1),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.BatchNorm1d(dimconf.lin_in_size_2),
             nn.Linear(dimconf.lin_in_size_2, dimconf.lin_out_size_2),
-            # nn.ReLU(),
-            # nn.Dropout(p=0.5),
         )
 
-        # self.softmax = nn.Softmax(dim=1)
+        # self.sigmoid = nn.Softmax(dim=1)
         self.sigmoid = nn.Sigmoid()
 
         # initialize the weights
@@ -311,10 +313,11 @@ class StressNetwork(nn.Module):
         output = self.fc(output)
 
         # pass the out of the linear layers to sigmoid layer
-        output = self.sigmoid(output)
+        # output = self.sigmoid(output)
         
         return output
     
     def predict_on_output(self, output): 
-        preds = (torch.tensor(output) >= 0.5).type(torch.float32)
+        preds = (torch.softmax(output.clone().detach(), dim=1) > 0.5).type(torch.float32)
+        # preds = torch.argmax(output, dim=1)
         return preds

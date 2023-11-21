@@ -7,6 +7,7 @@ import pandas as pd
 import os
 import pickle
 import random
+# import librosa
 
 from misc_tools import AudioCut
 from model_filter import XpassFilter
@@ -406,19 +407,44 @@ class PairRecDatasetPregen(Dataset):
         xx_2_pad = pad_sequence(xx_2, batch_first=batch_first, padding_value=0)
         return (xx_1_pad, x_1_lens), (xx_2_pad, x_2_lens), target
 
-
 class MelSpecTransform(nn.Module): 
-    def __init__(self, sample_rate, n_fft=400, n_mels=64, filter=None): 
+    def __init__(self, sample_rate, n_fft=400, n_mels=64, filter=None, norm="strip_mvn"): 
+        """
+        MelSpecTransform class for computing Mel spectrograms and applying normalization.
+
+        Args:
+            sample_rate (int): The sample rate of the audio signal.
+            n_fft (int): The number of FFT points. Default is 400.
+            n_mels (int): The number of Mel filterbanks. Default is 64.
+            filter (None or str): The type of filter to be used. Default is None.
+            norm (str): The normalization method to be applied. Available options are:
+                - "strip_mvn": Strip mean and variance normalization.
+                - "time_mvn": Time-wise mean and variance normalization.
+                - "minmax": Whole-piece min-max normalization.
+                - "strip_minmax": Strip min-max normalization.
+                - "pcen": Per-channel energy normalization.
+        """        
         super().__init__()
         self.sample_rate = sample_rate
         n_stft = int((n_fft//2) + 1)
         self.filter = filter
-        self.transform = torchaudio.transforms.MelSpectrogram(sample_rate, n_mels=n_mels, n_fft=n_fft)
+        self.transform = torchaudio.transforms.MelSpectrogram(sample_rate, n_mels=n_mels, n_fft=n_fft, power=2)
+        self.amp_to_db = torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80)
         self.inverse_mel = torchaudio.transforms.InverseMelScale(sample_rate=sample_rate, n_mels=n_mels, n_stft=n_stft)
         self.grifflim = torchaudio.transforms.GriffinLim(n_fft=n_fft)
-        
+
+        if norm == "strip_mvn":
+            self.norm_fun = MelSpecTransform.norm_strip_mvn
+        elif norm == "time_mvn":
+            self.norm_fun = MelSpecTransform.norm_time_mvn
+        elif norm == "minmax":
+            self.norm_fun = MelSpecTransform.norm_minmax
+        elif norm == "strip_minmax":
+            self.norm_fun = MelSpecTransform.norm_strip_minmax
+        elif norm == "pcen": 
+            self.norm_fun = MelSpecTransform.norm_pcen
     
-    def forward(self, waveform): 
+    def forward(self, waveform):
         # transform to mel_spectrogram
         if self.filter: 
             waveform = self.filter(waveform, self.sample_rate)
@@ -427,16 +453,44 @@ class MelSpecTransform(nn.Module):
         mel_spec = mel_spec.squeeze()
         mel_spec = mel_spec.permute(1, 0) # (F, L) -> (L, F)
 
-        """
-        There should be normalization method here, 
-        but for the moment we just leave it here, 
-        later, consider PCEN
-        """
-        # # Apply normalization (CMVN)
+        # mel_spec = torch.log(mel_spec + 1e-9)   # 20231121 newly added log
+        mel_spec = self.amp_to_db(mel_spec)
+        mel_spec = self.norm_fun(mel_spec)
+
+        return mel_spec
+
+    @staticmethod
+    def norm_strip_mvn(mel_spec):
+        eps = 1e-9
+        mean = mel_spec.mean(1, keepdim=True)
+        std = mel_spec.std(1, keepdim=True, unbiased=False)
+        norm_spec = (mel_spec - mean) / (std + eps)
+        return norm_spec
+    
+    @staticmethod
+    def norm_time_mvn(mel_spec):
         eps = 1e-9
         mean = mel_spec.mean(0, keepdim=True)
         std = mel_spec.std(0, keepdim=True, unbiased=False)
-        mel_spec = (mel_spec - mean) / (std + eps)
+        norm_spec = (mel_spec - mean) / (std + eps)
+        return norm_spec
+
+    @staticmethod
+    def norm_minmax(mel_spec):
+        min_val = mel_spec.min()
+        max_val = mel_spec.max()
+        norm_spec = (mel_spec - min_val) / (max_val - min_val)
+        return norm_spec
+    
+    @staticmethod
+    def norm_strip_minmax(mel_spec):
+        min_val = mel_spec.min(1, keepdim=True)[0]
+        max_val = mel_spec.max(1, keepdim=True)[0]
+        norm_spec = (mel_spec - min_val) / (max_val - min_val)
+        return norm_spec
+    
+    @staticmethod
+    def norm_pcen(mel_spec):
         return mel_spec
     
     def de_norm(self, this_mel_spec, waveform): 
@@ -458,3 +512,42 @@ class MelSpecTransform(nn.Module):
         i_mel = self.inverse_mel(mel_spec)
         inv = self.grifflim(i_mel)
         return inv
+    
+
+class SpecTransform(nn.Module): 
+    def __init__(self, sample_rate=16000, n_fft=400, filter=None): 
+        super().__init__()
+        self.sample_rate = sample_rate
+        self.filter = filter
+        self.transform = torchaudio.transforms.Spectrogram(n_fft=n_fft)
+        self.amp_to_db = torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80)
+        
+    
+    def forward(self, waveform): 
+        # transform to mel_spectrogram
+        if self.filter: 
+            waveform = self.filter(waveform, self.sample_rate)
+
+        spec = self.transform(waveform)  # (channel, n_mels, time)
+        spec = spec.squeeze()
+        spec = spec.permute(1, 0) # (F, L) -> (L, F)
+        spec = self.amp_to_db(spec)
+        spec = self.norm_minmax(spec)
+        return spec
+    
+    def norm_mvn(self, mel_spec):
+        eps = 1e-9
+        mean = mel_spec.mean(0, keepdim=True)
+        std = mel_spec.std(0, keepdim=True, unbiased=False)
+        norm_spec = (mel_spec - mean) / (std + eps)
+        return norm_spec
+    
+    def norm_minmax(self, mel_spec):
+        min_val = mel_spec.min(0)[1]
+        max_val = mel_spec.max(0)[1]
+        norm_spec = (mel_spec - min_val) / (max_val - min_val)
+        return norm_spec
+    
+    def norm_pcen(self, mel_spec):
+        pass
+        # librosa.pcen(mel_spec[0].detach()[0,:,:].numpy().copy()*(2**31), sr=self.sample_rate)
