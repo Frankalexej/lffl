@@ -178,13 +178,14 @@ class SiameseNetworkV2(nn.Module):
                                 num_layers=num_layers)
 
         self.fc = nn.Sequential(
-            # nn.Tanh(),
+            nn.Tanh(),
             nn.Dropout(p=0.5), 
             nn.BatchNorm1d(dimconf.lin_in_size_1),
             nn.Linear(dimconf.lin_in_size_1, dimconf.lin_out_size_1),
-            # nn.Linear(dimconf.lin_in_size_2, dimconf.lin_out_size_2),
-            # nn.ReLU(),
-            # nn.Dropout(p=0.5), 
+            nn.Tanh(),
+            nn.Dropout(p=0.5), 
+            nn.BatchNorm1d(dimconf.lin_in_size_2),
+            nn.Linear(dimconf.lin_in_size_2, dimconf.lin_out_size_2),
         )
 
         # self.sigmoid = nn.Sigmoid()
