@@ -5,6 +5,7 @@ import pandas as pd
 import os
 
 from paths import *
+from ssd_paths import *
 from misc_tools import PathUtils as PU
 from misc_progress_bar import draw_progress_bar
 
@@ -32,4 +33,5 @@ def modify_guide(src_path, target_path):
 
 
 if __name__ == "__main__": 
-    modify_guide(os.path.join(src_, "guide.csv"), os.path.join(src_, "guide_mod.csv"))
+    # modify_guide(os.path.join(src_, "guide.csv"), os.path.join(src_, "guide_mod.csv"))
+    modify_guide(os.path.join(ssrc_, "guide.csv"), os.path.join(ssrc_, "guide_mod.csv"))
