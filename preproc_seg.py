@@ -3,6 +3,7 @@ import torchaudio
 from praatio import textgrid
 import pandas as pd
 from paths import *
+from ssd_paths import *
 from misc_tools import PathUtils as PU, AudioCut
 # from misc_progress_bar import draw_progress_bar
 from misc_multiprocessing import *
@@ -111,6 +112,7 @@ def segment_and_extract(work_list, dir_au, dir_tg, dir_ca, dir_cg):
         # draw_progress_bar(idx, total_speakers)
 
 if __name__ == "__main__": 
-    run_mp(segment_and_extract, os.listdir(train_audio_), 32, *(train_audio_, train_tg_, train_cut_audio_, train_cut_guide_))
+    # run_mp(segment_and_extract, os.listdir(train_audio_), 32, *(train_audio_, train_tg_, train_cut_audio_, train_cut_guide_))
+    run_mp(segment_and_extract, os.listdir(strain_audio_), 32, *(strain_audio_, strain_tg_, strain_cut_audio_, strain_cut_guide_))
     # segment_and_extract(os.listdir(train_audio_), train_audio_, train_tg_, train_cut_audio_, train_cut_guide_)
     # segment_and_extract(try_audio_, try_tg_, try_cut_audio_, try_cut_guide_)

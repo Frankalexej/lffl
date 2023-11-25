@@ -2,6 +2,7 @@ import pandas as pd
 import os
 
 from paths import *
+from ssd_paths import *
 from misc_tools import PathUtils as PU
 from misc_progress_bar import draw_progress_bar
 
@@ -44,4 +45,5 @@ def integrate_guides(src_path, target_filename):
 
 
 if __name__ == "__main__": 
-    integrate_guides(train_cut_guide_, os.path.join(src_, "guide.csv"))
+    # integrate_guides(train_cut_guide_, os.path.join(src_, "guide.csv"))
+    integrate_guides(strain_cut_guide_, os.path.join(ssrc_, "guide.csv"))

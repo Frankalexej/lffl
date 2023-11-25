@@ -408,22 +408,7 @@ class PairRecDatasetPregen(Dataset):
         return (xx_1_pad, x_1_lens), (xx_2_pad, x_2_lens), target
 
 class MelSpecTransform(nn.Module): 
-    def __init__(self, sample_rate, n_fft=400, n_mels=64, filter=None, norm="strip_mvn"): 
-        """
-        MelSpecTransform class for computing Mel spectrograms and applying normalization.
-
-        Args:
-            sample_rate (int): The sample rate of the audio signal.
-            n_fft (int): The number of FFT points. Default is 400.
-            n_mels (int): The number of Mel filterbanks. Default is 64.
-            filter (None or str): The type of filter to be used. Default is None.
-            norm (str): The normalization method to be applied. Available options are:
-                - "strip_mvn": Strip mean and variance normalization.
-                - "time_mvn": Time-wise mean and variance normalization.
-                - "minmax": Whole-piece min-max normalization.
-                - "strip_minmax": Strip min-max normalization.
-                - "pcen": Per-channel energy normalization.
-        """        
+    def __init__(self, sample_rate, n_fft=400, n_mels=64, filter=None, norm=None): 
         super().__init__()
         self.sample_rate = sample_rate
         n_stft = int((n_fft//2) + 1)
@@ -432,17 +417,7 @@ class MelSpecTransform(nn.Module):
         self.amp_to_db = torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80)
         self.inverse_mel = torchaudio.transforms.InverseMelScale(sample_rate=sample_rate, n_mels=n_mels, n_stft=n_stft)
         self.grifflim = torchaudio.transforms.GriffinLim(n_fft=n_fft)
-
-        if norm == "strip_mvn":
-            self.norm_fun = MelSpecTransform.norm_strip_mvn
-        elif norm == "time_mvn":
-            self.norm_fun = MelSpecTransform.norm_time_mvn
-        elif norm == "minmax":
-            self.norm_fun = MelSpecTransform.norm_minmax
-        elif norm == "strip_minmax":
-            self.norm_fun = MelSpecTransform.norm_strip_minmax
-        elif norm == "pcen": 
-            self.norm_fun = MelSpecTransform.norm_pcen
+        self.norm = norm
     
     def forward(self, waveform):
         # transform to mel_spectrogram
@@ -455,42 +430,9 @@ class MelSpecTransform(nn.Module):
 
         # mel_spec = torch.log(mel_spec + 1e-9)   # 20231121 newly added log
         mel_spec = self.amp_to_db(mel_spec)
-        mel_spec = self.norm_fun(mel_spec)
+        if self.norm: 
+            mel_spec = self.norm(mel_spec)
 
-        return mel_spec
-
-    @staticmethod
-    def norm_strip_mvn(mel_spec):
-        eps = 1e-9
-        mean = mel_spec.mean(1, keepdim=True)
-        std = mel_spec.std(1, keepdim=True, unbiased=False)
-        norm_spec = (mel_spec - mean) / (std + eps)
-        return norm_spec
-    
-    @staticmethod
-    def norm_time_mvn(mel_spec):
-        eps = 1e-9
-        mean = mel_spec.mean(0, keepdim=True)
-        std = mel_spec.std(0, keepdim=True, unbiased=False)
-        norm_spec = (mel_spec - mean) / (std + eps)
-        return norm_spec
-
-    @staticmethod
-    def norm_minmax(mel_spec):
-        min_val = mel_spec.min()
-        max_val = mel_spec.max()
-        norm_spec = (mel_spec - min_val) / (max_val - min_val)
-        return norm_spec
-    
-    @staticmethod
-    def norm_strip_minmax(mel_spec):
-        min_val = mel_spec.min(1, keepdim=True)[0]
-        max_val = mel_spec.max(1, keepdim=True)[0]
-        norm_spec = (mel_spec - min_val) / (max_val - min_val)
-        return norm_spec
-    
-    @staticmethod
-    def norm_pcen(mel_spec):
         return mel_spec
     
     def de_norm(self, this_mel_spec, waveform): 
@@ -551,3 +493,38 @@ class SpecTransform(nn.Module):
     def norm_pcen(self, mel_spec):
         pass
         # librosa.pcen(mel_spec[0].detach()[0,:,:].numpy().copy()*(2**31), sr=self.sample_rate)
+
+class Normalizer: 
+    @staticmethod
+    def norm_strip_mvn(mel_spec):
+        eps = 1e-9
+        mean = mel_spec.mean(1, keepdim=True)
+        std = mel_spec.std(1, keepdim=True, unbiased=False)
+        norm_spec = (mel_spec - mean) / (std + eps)
+        return norm_spec
+    
+    @staticmethod
+    def norm_time_mvn(mel_spec):
+        eps = 1e-9
+        mean = mel_spec.mean(0, keepdim=True)
+        std = mel_spec.std(0, keepdim=True, unbiased=False)
+        norm_spec = (mel_spec - mean) / (std + eps)
+        return norm_spec
+
+    @staticmethod
+    def norm_minmax(mel_spec):
+        min_val = mel_spec.min()
+        max_val = mel_spec.max()
+        norm_spec = (mel_spec - min_val) / (max_val - min_val)
+        return norm_spec
+    
+    @staticmethod
+    def norm_strip_minmax(mel_spec):
+        min_val = mel_spec.min(1, keepdim=True)[0]
+        max_val = mel_spec.max(1, keepdim=True)[0]
+        norm_spec = (mel_spec - min_val) / (max_val - min_val)
+        return norm_spec
+    
+    @staticmethod
+    def norm_pcen(mel_spec):
+        return mel_spec
