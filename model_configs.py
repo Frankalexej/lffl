@@ -19,11 +19,13 @@ class ModelDimConfigs:
 
 
 class TrainingConfigs: 
-    BATCH_SIZE = 64
+    BATCH_SIZE = 128
 
     REC_SAMPLE_RATE = 16000
     N_FFT = 320
     N_MELS = 64
+
+    N_MFCC = 13
 
     N_SPEC = 201
     

@@ -7,6 +7,7 @@ import pandas as pd
 import os
 import pickle
 import random
+from scipy import signal
 # import librosa
 
 from misc_tools import AudioCut
@@ -406,9 +407,20 @@ class PairRecDatasetPregen(Dataset):
         xx_1_pad = pad_sequence(xx_1, batch_first=batch_first, padding_value=0)
         xx_2_pad = pad_sequence(xx_2, batch_first=batch_first, padding_value=0)
         return (xx_1_pad, x_1_lens), (xx_2_pad, x_2_lens), target
+    
+
+class Resampler(nn.Module): 
+    def __init__(self, target_frame_num=25, axis=0): 
+        super().__init__()
+        self.target_frame_num = target_frame_num
+        self.axis = axis
+    
+    def forward(self, mfcc): 
+        return torch.tensor(signal.resample(mfcc, self.target_frame_num, axis=self.axis))
+
 
 class MelSpecTransform(nn.Module): 
-    def __init__(self, sample_rate, n_fft=400, n_mels=64, filter=None, norm=None): 
+    def __init__(self, sample_rate, n_fft=400, n_mels=64, filter=None, norm=None, resample=None): 
         super().__init__()
         self.sample_rate = sample_rate
         n_stft = int((n_fft//2) + 1)
@@ -418,6 +430,7 @@ class MelSpecTransform(nn.Module):
         self.inverse_mel = torchaudio.transforms.InverseMelScale(sample_rate=sample_rate, n_mels=n_mels, n_stft=n_stft)
         self.grifflim = torchaudio.transforms.GriffinLim(n_fft=n_fft)
         self.norm = norm
+        self.resample = resample
     
     def forward(self, waveform):
         # transform to mel_spectrogram
@@ -432,6 +445,9 @@ class MelSpecTransform(nn.Module):
         mel_spec = self.amp_to_db(mel_spec)
         if self.norm: 
             mel_spec = self.norm(mel_spec)
+        
+        if self.resample: 
+            mel_spec = self.resample(mel_spec)
 
         return mel_spec
     
@@ -502,6 +518,14 @@ class Normalizer:
         std = mel_spec.std(1, keepdim=True, unbiased=False)
         norm_spec = (mel_spec - mean) / (std + eps)
         return norm_spec
+
+    @staticmethod
+    def norm_mvn(mel_spec):
+        eps = 1e-9
+        mean = mel_spec.mean()
+        std = mel_spec.std(unbiased=False)
+        norm_spec = (mel_spec - mean) / (std + eps)
+        return norm_spec
     
     @staticmethod
     def norm_time_mvn(mel_spec):
@@ -528,3 +552,85 @@ class Normalizer:
     @staticmethod
     def norm_pcen(mel_spec):
         return mel_spec
+    
+
+class NormalizerKeepShape(nn.Module):
+    # this normalizer will work on mels that keep the shape as (channel, F, L) 
+    # strip: normalize and reduce along the frequency axis
+    # time: normalize and reduce along the time axis
+    # -: global normalization across whole mel
+    def __init__(self, fun):
+        super().__init__()
+        self.fun = fun
+    
+    def forward(self, mel_spec):
+        return self.fun(mel_spec)
+
+    @staticmethod
+    def norm_strip_mvn(mel_spec):
+        eps = 1e-9
+        mean = mel_spec.mean(1, keepdim=True)
+        std = mel_spec.std(1, keepdim=True, unbiased=False)
+        norm_spec = (mel_spec - mean) / (std + eps)
+        return norm_spec
+
+    @staticmethod
+    def norm_mvn(mel_spec):
+        eps = 1e-9
+        mean = mel_spec.mean()
+        std = mel_spec.std(unbiased=False)
+        norm_spec = (mel_spec - mean) / (std + eps)
+        return norm_spec
+    
+    @staticmethod
+    def norm_time_mvn(mel_spec):
+        eps = 1e-9
+        mean = mel_spec.mean(2, keepdim=True)
+        std = mel_spec.std(2, keepdim=True, unbiased=False)
+        norm_spec = (mel_spec - mean) / (std + eps)
+        return norm_spec
+
+    @staticmethod
+    def norm_minmax(mel_spec):
+        min_val = mel_spec.min()
+        max_val = mel_spec.max()
+        norm_spec = (mel_spec - min_val) / (max_val - min_val)
+        return norm_spec
+    
+    @staticmethod
+    def norm_strip_minmax(mel_spec):
+        min_val = mel_spec.min(1, keepdim=True)[0]
+        max_val = mel_spec.max(1, keepdim=True)[0]
+        norm_spec = (mel_spec - min_val) / (max_val - min_val)
+        return norm_spec
+    
+    @staticmethod
+    def norm_pcen(mel_spec):
+        return mel_spec
+    
+class Padder(nn.Module): 
+    def __init__(self, sample_rate=16000, pad_len_ms=250, noise_level=0.001): 
+        super().__init__()
+        self.sample_rate = sample_rate
+        self.pad_len_frame = sample_rate // 1000 * pad_len_ms
+        self.noise_level = noise_level
+    
+    def forward(self, sig): 
+        num_rows, sig_len = sig.shape
+        if (sig_len > self.pad_len_frame):
+            # Truncate the signal to the given length
+            sig = sig[:,:self.pad_len_frame]
+
+        elif (sig_len < self.pad_len_frame):
+            # Length of padding to add at the beginning and end of the signal
+            pad_begin_len = random.randint(0, self.pad_len_frame - sig_len)
+            pad_end_len = self.pad_len_frame - sig_len - pad_begin_len
+
+            # Pad with 0s
+            # pad_begin = torch.zeros((num_rows, pad_begin_len))
+            # pad_end = torch.zeros((num_rows, pad_end_len))
+            pad_begin = torch.randn((num_rows, pad_begin_len)) * self.noise_level
+            pad_end = torch.randn((num_rows, pad_end_len)) * self.noise_level
+
+            sig = torch.cat((pad_begin, sig, pad_end), 1)
+        return sig

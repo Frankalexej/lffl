@@ -241,12 +241,12 @@ class JudgeNetwork(nn.Module):
                                 num_layers=num_layers)
 
         self.fc = nn.Sequential(
+            nn.ReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(dimconf.lin_in_size_1, dimconf.lin_out_size_1),
             nn.ReLU(),
             nn.Dropout(p=0.5), 
             nn.Linear(dimconf.lin_in_size_2, dimconf.lin_out_size_2),
-            nn.ReLU(),
-            nn.Dropout(p=0.5),
         )
 
         self.softmax = nn.Softmax(dim=1)
