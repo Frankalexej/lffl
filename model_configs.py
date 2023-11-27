@@ -29,4 +29,4 @@ class TrainingConfigs:
 
     N_SPEC = 201
     
-    LOADER_WORKER = 24
+    LOADER_WORKER = 32

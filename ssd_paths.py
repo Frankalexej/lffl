@@ -7,6 +7,8 @@ strain_tg_ = ssrc_ + "train-clean-100-tg/"
 strain_cut_audio_ = ssrc_ + "train-clean-100-ca/"  # cut audio, ideally following structure of original audio
 strain_cut_guide_ = ssrc_ + "train-clean-100-cg/"  # cut guide, ideally following structure of original audio
 
+suse_ = ssrc_ + "/use/"
+
 
 def mk(dir): 
     os.makedirs(dir, exist_ok = True)
