@@ -410,20 +410,22 @@ class PairRecDatasetPregen(Dataset):
 
 class PairRecDatasetPregenPrecombine(Dataset):
     
-    def __init__(self, aud_dir, log_file, list_save_dir, total_number=10000, transform=None):
+    def __init__(self, aud_dir, log_file, list_save_dir, total_number=10000, transform=None, whether_load_from=False, load_from=None):
         # we define a total number so that we can freely adjust the total number of training examples we take hold of.
         # Because we definitely don't use up the whole pair set.
         self.aud_dir = aud_dir
         self.list_save_dir = list_save_dir
-        self.log = pd.read_csv(log_file)
         self.total_number = total_number
         self.transform = transform
-
-        # group audios based on label
-        self.group_examples()
-
-        # initialize the list of paired audio
-        self.get_list()
+        if (not whether_load_from) or (not load_from): 
+            self.log = pd.read_csv(log_file)
+            # group audios based on label
+            self.group_examples()
+            # initialize the list of paired audio
+            self.get_list()
+        else: 
+            self.paired_audio = pd.read_csv(load_from)
+        
 
     def group_examples(self):
         """
@@ -663,7 +665,14 @@ class SpecTransform(nn.Module):
         pass
         # librosa.pcen(mel_spec[0].detach()[0,:,:].numpy().copy()*(2**31), sr=self.sample_rate)
 
-class Normalizer: 
+class Normalizer(nn.Module): 
+    def __init__(self, fun):
+        super().__init__()
+        self.fun = fun
+    
+    def forward(self, mel_spec):
+        return self.fun(mel_spec)
+    
     @staticmethod
     def norm_strip_mvn(mel_spec):
         eps = 1e-9
