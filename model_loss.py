@@ -50,7 +50,7 @@ def calculate_mean_ci(dissimilarities, labels, alpha=0.95):
     labels_np = np.array(labels)
 
     # Calculate mean, upper confidence interval, and lower confidence interval for "same" label
-    indices_same = labels_np == 0
+    indices_same = labels_np == 1
     dissimilarities_same = dissimilarities_np[indices_same]
 
     mean_same = np.mean(dissimilarities_same)
@@ -58,7 +58,7 @@ def calculate_mean_ci(dissimilarities, labels, alpha=0.95):
     mean_same, ci_upper_same, ci_lower_same = mean_same, ci_same[1], ci_same[0]
 
     # Calculate mean, upper confidence interval, and lower confidence interval for "different" label
-    indices_diff = labels_np == 1
+    indices_diff = labels_np == 0
     dissimilarities_diff = dissimilarities_np[indices_diff]
 
     mean_diff = np.mean(dissimilarities_diff)
