@@ -39,15 +39,16 @@ def lowpass_filter(audio,fs,cut_off_upper, cut_off_lower=0):
 
 
 class XpassFilter(nn.Module):
-    def __init__(self, cut_off_upper, cut_off_lower=0):
+    def __init__(self, cut_off_upper, cut_off_lower=0, sample_rate=16000):
         super(XpassFilter, self).__init__()
         self.cut_off_upper = cut_off_upper
         self.cut_off_lower = cut_off_lower
+        self.sample_rate = sample_rate
 
-    def forward(self, audio, sample_rate):
+    def forward(self, audio):
         # audio is a PyTorch tensor with shape (num_channels, num_samples)
         num_channels, num_samples = audio.size()
-        dt = 1 / sample_rate
+        dt = 1 / self.sample_rate
 
         yf = torch.fft.rfft(audio, num_samples)
         freq = torch.fft.rfftfreq(num_samples, dt)

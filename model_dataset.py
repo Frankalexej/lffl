@@ -56,7 +56,7 @@ class SingleRecSelectBalanceDatasetPrecombine(Dataset):
         guide_file = guide_file[guide_file['nSample'] > 400]
         guide_file = guide_file[guide_file['nSample'] <= 8000]
 
-        guide_file = self.balance_dataframe(guide_file, "segment_nostress")
+        # guide_file = self.balance_dataframe(guide_file, "segment_nostress")
 
         # path_col = guide_file.apply(AudioCut.record2filepath, axis=1)
         path_col = guide_file["combined_path"]
