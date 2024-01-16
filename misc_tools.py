@@ -22,6 +22,27 @@ class PathUtils:
 
 class ARPABET: 
     @staticmethod
+    def list_vowels(ah=False): 
+        if ah: 
+            return ['AA', 'AE', 'AH', 'AO', 'AW', 'AX', 'AXR', 'AY', 'EH', 'ER', 'EY', 'IH', 'IX', 'IY', 'OW', 'OY', 'UH', 'UW', 'UX']
+        else:
+            return ['AA', 'AE', 'AO', 'AW', 'AX', 'AXR', 'AY', 'EH', 'ER', 'EY', 'IH', 'IX', 'IY', 'OW', 'OY', 'UH', 'UW', 'UX']
+    
+    @staticmethod
+    def list_consonants(): 
+        return [
+            'B', 'CH', 'D', 'DH', 'DX', 'EL', 'EM', 'EN', 'F', 'G', 'HH', 'H', 'JH', 'K', 'L', 'M', 'N',
+            'NX', 'NG', 'P', 'Q', 'R', 'S', 'SH', 'T', 'TH', 'V', 'W', 'WH', 'Y', 'Z', 'ZH'
+        ]
+    
+    @staticmethod
+    def intersect_lists(list1, list2):
+        """
+        Keep the order as in list1
+        """
+        return [x for x in list1 if x in list2]
+
+    @staticmethod
     def is_vowel(arpabet_transcription):
         vowels = ['AA', 'AE', 'AH', 'AO', 'AW', 'AX', 'AXR', 'AY', 'EH', 'ER', 'EY', 'IH', 'IX', 'IY', 'OW', 'OY', 'UH', 'UW', 'UX']
         

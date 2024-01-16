@@ -188,6 +188,8 @@ def run_once(hyper_dir, pretype="f", posttype="f"):
     model_txt_path = os.path.join(model_save_dir, "model.txt")
     with open(model_txt_path, "w") as f:
         f.write(model_str)
+        f.write("\n")
+        f.write(str(summary(model, input_size=(128, 1, 64, 21))))
 
     # Load Data (I)
     train_loader, valid_loader = load_data(type=pretype)
@@ -377,11 +379,11 @@ def run_once(hyper_dir, pretype="f", posttype="f"):
     special_recs.save()
 
 if __name__ == "__main__": 
-    RUN_TIMES = 1
+    RUN_TIMES = 8
     for run_time in range(RUN_TIMES):
         ## Hyper-preparations
         ts = str(get_timestamp())
-        train_name = "H03"
+        train_name = "H04"
         model_save_dir = os.path.join(model_save_, f"{train_name}-{ts}")
         print(f"{train_name}-{ts}")
         mk(model_save_dir)

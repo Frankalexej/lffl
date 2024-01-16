@@ -31,6 +31,24 @@ class ListRecorder(Recorder):
         with open(self.IOPath, 'wb') as file:
             pickle.dump(self.record, file)
 
+class DictRecorder(Recorder):
+    def __init__(self, IOPath): 
+        self.record = {}
+        self.IOPath = IOPath
+
+    def read(self): 
+        # only used by loss hists 
+        with open(self.IOPath, 'rb') as f:
+            self.record = pickle.load(f)
+    
+    def save(self): 
+        with open(self.IOPath, 'wb') as file:
+            pickle.dump(self.record, file)
+
+    def append(self, content:tuple): 
+        key, value = content
+        self.record[key] = value
+
 
 class DfRecorder(): 
     def __init__(self, IOPath): 
