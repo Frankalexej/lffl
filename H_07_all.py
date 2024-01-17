@@ -62,25 +62,28 @@ class Network(nn.Module):
     def __init__(self):
         super().__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(1, 8, kernel_size=3, stride=1, padding=1), 
-            nn.BatchNorm2d(8), 
+            nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1), 
+            nn.BatchNorm2d(16), 
             nn.ReLU(), 
             nn.MaxPool2d(kernel_size=2, stride=2), 
-            nn.Conv2d(8, 32, kernel_size=3, stride=1, padding=1), 
-            nn.BatchNorm2d(32), 
+            nn.Conv2d(16, 64, kernel_size=3, stride=1, padding=1), 
+            nn.BatchNorm2d(64), 
+            nn.ReLU(), 
+            nn.MaxPool2d(kernel_size=2, stride=2), 
+            nn.Conv2d(64, 256, kernel_size=3, stride=1, padding=1), 
+            nn.BatchNorm2d(256), 
             nn.ReLU(), 
             nn.MaxPool2d(kernel_size=2, stride=2)
-            # Removed the third convolutional layer
         )
         self.ap = nn.AdaptiveAvgPool2d(output_size=1)
         self.lin_1 = nn.Sequential(
-            nn.Linear(32 * 16 * 5, 128),  # Reduced size
-            nn.Dropout(0.5),  # Adjusted dropout rate
+            nn.Linear(256 * 8 * 2, 128), 
+            nn.Dropout(0.7), 
             nn.BatchNorm1d(128),
             nn.ReLU(),
-            nn.Linear(128, 64),  # Reduced size
+            # nn.Linear(512, 256),
         )
-        self.lin = nn.Linear(in_features=64, out_features=38)
+        self.lin = nn.Linear(in_features=128, out_features=38)
 
         self.conv.apply(self.init_conv_weights)
         self.lin.apply(self.init_lin_weights)
@@ -396,7 +399,7 @@ if __name__ == "__main__":
     for run_time in range(RUN_TIMES):
         ## Hyper-preparations
         ts = str(get_timestamp())
-        train_name = "H05"
+        train_name = "H07"
         model_save_dir = os.path.join(model_save_, f"{train_name}-{ts}")
         print(f"{train_name}-{ts}")
         mk(model_save_dir)

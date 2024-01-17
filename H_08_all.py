@@ -78,9 +78,9 @@ class Network(nn.Module):
             nn.Dropout(0.5),  # Adjusted dropout rate
             nn.BatchNorm1d(128),
             nn.ReLU(),
-            nn.Linear(128, 64),  # Reduced size
+            # nn.Linear(128, 64),  # Reduced size
         )
-        self.lin = nn.Linear(in_features=64, out_features=38)
+        self.lin = nn.Linear(in_features=128, out_features=38)
 
         self.conv.apply(self.init_conv_weights)
         self.lin.apply(self.init_lin_weights)
@@ -396,7 +396,7 @@ if __name__ == "__main__":
     for run_time in range(RUN_TIMES):
         ## Hyper-preparations
         ts = str(get_timestamp())
-        train_name = "H05"
+        train_name = "H08"
         model_save_dir = os.path.join(model_save_, f"{train_name}-{ts}")
         print(f"{train_name}-{ts}")
         mk(model_save_dir)
