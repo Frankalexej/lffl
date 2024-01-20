@@ -71,6 +71,19 @@ class ARPABET:
             return "consonant"
         else: 
             return "nap"
+    
+    @staticmethod
+    def vowel_consonant_num(arpabet_transcription): 
+        if ARPABET.is_vowel(arpabet_transcription): 
+            return 1
+        elif ARPABET.is_consonant(arpabet_transcription): 
+            return 0
+        else: 
+            return -1
+    
+    VOWEL_CODE = 1
+    CONSONANT_CODE = 0
+    NAP_CODE = -1
         
 class MyAudio: 
     @staticmethod

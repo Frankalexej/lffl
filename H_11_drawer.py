@@ -6,7 +6,7 @@ def draw_learning_curve_and_accuracy(losses, accs, epoch="", best_val=None, save
     plt.clf()
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
     train_losses, valid_losses, full_valid_losses, best_val_loss = losses
-    train_accs, valid_accs, full_valid_accs = accs
+    train_accs, valid_consonant_accs, valid_vowel_accs, full_valid_consonant_accs, full_valid_vowel_accs = accs
 
     # Plot Loss on the left subplot
     ax1.plot(train_losses, label='Train')
@@ -18,10 +18,10 @@ def draw_learning_curve_and_accuracy(losses, accs, epoch="", best_val=None, save
 
     # Plot Accuracy on the right subplot
     ax2.plot(train_accs, label='Train')
-    ax2.plot(valid_accs, label='Valid')
-    ax2.plot(full_valid_accs, label='Full Valid')
-    if best_val: 
-        ax2.axhline(y=best_val, color='r', linestyle='--', label=f'Best: {best_val:.3f}')
+    ax2.plot(valid_consonant_accs, label='Valid Cons')
+    ax2.plot(full_valid_consonant_accs, label='Full Valid Cons')
+    ax2.plot(valid_vowel_accs, label='Valid Vowel')
+    ax2.plot(full_valid_vowel_accs, label='Full Valid Vowel')
     ax2.set_title('Learning Curve Accuracy' + f" {epoch}")
     ax2.legend(loc="lower right")
 

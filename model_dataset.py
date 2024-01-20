@@ -8,6 +8,7 @@ import os
 import pickle
 import random
 from scipy import signal
+from misc_tools import ARPABET
 # import librosa
 
 from misc_tools import AudioCut
@@ -91,7 +92,7 @@ class SingleRecSelectBalanceDatasetPrecombine(Dataset):
             data = self.transform(data)
         seg = self.seg_set[idx]
 
-        return data, self.mapper.encode(seg)
+        return data, self.mapper.encode(seg), ARPABET.vowel_consonant_num(seg)
 
     @staticmethod
     def balance_dataframe(df, tag_column):
