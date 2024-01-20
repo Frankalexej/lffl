@@ -331,6 +331,7 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f"):
 
         avg_valid_loss = valid_loss / valid_num
         valid_losses.append(avg_valid_loss)
+        full_valid_losses.append(avg_valid_loss)
         # valid_accs.append(valid_correct / valid_total)
         valid_consonant_accs.append(valid_consonant_correct / valid_consonant_total)
         valid_vowel_accs.append(valid_vowel_correct / valid_vowel_total)
@@ -388,7 +389,7 @@ if __name__ == "__main__":
 
         mymap = TokenMap(mylist)
 
-        use_proportion = 0.01
+        use_proportion = 0.007
 
         train_ds = ThisDataset(strain_cut_audio_, 
                             os.path.join(suse_, "guide_train.csv"), 
@@ -417,7 +418,7 @@ if __name__ == "__main__":
         DS_Tools.save_indices(os.path.join(model_save_dir, f"valid.use"), use_valid_ds.indices)
         print(len(use_train_ds), len(use_valid_ds))
         
-        for model_type in ["large"]: # "small", "medium", 
+        for model_type in ["small", "medium", "large"]: # "small", "medium", 
             run_once(model_save_dir, model_type=model_type, pretype="f", posttype="f")
             run_once(model_save_dir, model_type=model_type, pretype="l", posttype="f")
             run_once(model_save_dir, model_type=model_type, pretype="h", posttype="f")
