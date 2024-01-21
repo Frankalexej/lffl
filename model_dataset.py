@@ -48,6 +48,79 @@ class TokenMap:
     
     def token_num(self): 
         return len(self.token2idx)
+    
+class SingleRecSelectBalanceDatasetPrecombineXYZ(Dataset): 
+    def __init__(self, src_dir, guide_, select=[], mapper=None, transform=None): 
+        guide_file = pd.read_csv(guide_)
+
+        guide_file = guide_file[guide_file["segment_nostress"].isin(select)]
+        guide_file = guide_file[guide_file['nSample'] > 400]
+        guide_file = guide_file[guide_file['nSample'] <= 8000]
+
+        # guide_file = self.balance_dataframe(guide_file, "segment_nostress")
+
+        # path_col = guide_file.apply(AudioCut.record2filepath, axis=1)
+        path_col = guide_file["combined_path"]
+        seg_col = guide_file["segment_nostress"]
+
+        self.dataset = path_col.tolist()
+        self.seg_set = seg_col.tolist()
+        self.src_dir = src_dir
+        self.transform = transform
+        if mapper: 
+            self.mapper = mapper
+        else: 
+            # self.mapper = TokenMap(sorted(seg_col.unique().tolist()))
+            self.mapper = TokenMap(select)
+        
+
+    def __len__(self): 
+        return len(self.dataset)
+
+    def __getitem__(self, idx): 
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        file_name = os.path.join(
+            self.src_dir, 
+            self.dataset[idx]
+        )
+
+        data, sample_rate = torchaudio.load(file_name, normalize=True)
+        if self.transform: 
+            data = self.transform(data)
+        seg = self.seg_set[idx]
+
+        return data, self.mapper.encode(seg), ARPABET.vowel_consonant_num(seg)
+
+    @staticmethod
+    def balance_dataframe(df, tag_column):
+        """
+        Balance the dataset in a Pandas DataFrame by randomly reducing the number of samples for each tag to match the minimum number of samples.
+
+        Parameters:
+        - df: Pandas DataFrame containing audio samples and corresponding tags.
+        - audio_column: Name of the column containing audio samples in the DataFrame.
+        - tag_column: Name of the column containing tags in the DataFrame.
+
+        Returns:
+        - balanced_df: Pandas DataFrame with a balanced number of samples for each tag.
+        """
+        # Find the minimum number of samples for any tag
+        min_samples = min(df[tag_column].value_counts())
+
+        # Create a dictionary to store indices of samples for each tag
+        tag_indices = {tag: df.index[df[tag_column] == tag].tolist() for tag in df[tag_column].unique()}
+
+        # Randomly select indices to keep for each tag to balance the dataset
+        balanced_indices = []
+        for tag, indices in tag_indices.items():
+            balanced_indices.extend(random.sample(indices, min_samples))
+
+        # Create balanced DataFrame using the selected indices
+        balanced_df = df.loc[balanced_indices].reset_index(drop=True)
+
+        return balanced_df
 
 class SingleRecSelectBalanceDatasetPrecombine(Dataset): 
     def __init__(self, src_dir, guide_, select=[], mapper=None, transform=None): 
@@ -70,9 +143,8 @@ class SingleRecSelectBalanceDatasetPrecombine(Dataset):
         if mapper: 
             self.mapper = mapper
         else: 
-            self.mapper = TokenMap(sorted(seg_col.unique().tolist()))
-        
-        self.mapper = TokenMap(select)
+            # self.mapper = TokenMap(sorted(seg_col.unique().tolist()))
+            self.mapper = TokenMap(select)
         
 
     def __len__(self): 
@@ -92,7 +164,7 @@ class SingleRecSelectBalanceDatasetPrecombine(Dataset):
             data = self.transform(data)
         seg = self.seg_set[idx]
 
-        return data, self.mapper.encode(seg), ARPABET.vowel_consonant_num(seg)
+        return data, self.mapper.encode(seg)
 
     @staticmethod
     def balance_dataframe(df, tag_column):
