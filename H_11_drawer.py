@@ -20,8 +20,6 @@ def draw_learning_curve_and_accuracy(losses, accs, epoch="", best_val=None, save
     ax2.plot(train_accs, label='Train')
     ax2.plot(valid_accs, label='Valid')
     ax2.plot(full_valid_accs, label='Full Valid')
-    if best_val: 
-        ax2.axhline(y=best_val, color='r', linestyle='--', label=f'Best: {best_val:.3f}')
     ax2.set_title('Learning Curve Accuracy' + f" {epoch}")
     ax2.legend(loc="lower right")
 

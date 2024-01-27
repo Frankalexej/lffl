@@ -1,6 +1,15 @@
 import os
 
-sroot_ = "/media/ldlmdl/A2AAE4B1AAE482E1/SSD_Documents/lffl/"   # hyperpath of here
+# sroot_ = "/mnt/storage/LDLSharedData/lffl/"   # hyperpath of here
+# ssrc_ = sroot_ + "/src/"
+# strain_audio_ = ssrc_ + "train-clean-100-audio/"
+# strain_tg_ = ssrc_ + "train-clean-100-tg/"
+# strain_cut_audio_ = ssrc_ + "train-clean-100-ca/"  # cut audio, ideally following structure of original audio
+# strain_cut_guide_ = ssrc_ + "train-clean-100-cg/"  # cut guide, ideally following structure of original audio
+
+# suse_ = ssrc_ + "/use/"
+
+sroot_ = "../"   # hyperpath of here
 ssrc_ = sroot_ + "/src/"
 strain_audio_ = ssrc_ + "train-clean-100-audio/"
 strain_tg_ = ssrc_ + "train-clean-100-tg/"

@@ -17,6 +17,8 @@ debug_ = src_ + "debug/"
 
 model_save_ = root_ + "model_save/"
 
+use_ = src_ + "/use/"
+
 
 
 def mk(dir): 
