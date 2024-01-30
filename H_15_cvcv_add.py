@@ -1,12 +1,4 @@
-### Consonant and Vowel separated
-### Why? In one paper it is reported that preterm babies have attenuated performance only on vowels. 
-### In H_09, we will train using both consonants and vowels, but for testing only either of them. 
-### Also, we want to unify the running of models. We will name the models with names Small, Medium, Large, and place them in models. 
-
-### However, it seems that directly training on mix and test on either of them is not working. 
-### We will take a closer look into the each category under the mix. 
-
-### In this runner, we will use mix to train and C/V to test. 
+### In this repair, we read in the savings of each run and additionally evaluate on validation data that is of same condition and range as training.  
 
 # All in Runner
 ## Importing the libraries
@@ -25,6 +17,7 @@ from torch.nn import init
 from H_10_models import SmallNetwork, MediumNetwork, LargeNetwork
 from model_configs import ModelDimConfigs, TrainingConfigs
 from misc_tools import get_timestamp, ARPABET
+from misc_tools import PathUtils as PU
 from model_dataset import DS_Tools, Padder, TokenMap, NormalizerKeepShape
 from model_dataset import SingleRecSelectBalanceDatasetPrecombine as ThisDataset
 from model_filter import XpassFilter
@@ -32,7 +25,7 @@ from paths import *
 from ssd_paths import *
 from misc_progress_bar import draw_progress_bar
 from misc_recorder import *
-from H_11_drawer import draw_learning_curve_and_accuracy
+# from H_11_drawer import draw_learning_curve_and_accuracy
 import argparse
 
 
@@ -110,18 +103,58 @@ def load_data(type="f", sel="full", load="train"):
                                 num_workers=TrainingConfigs.LOADER_WORKER)
         return valid_loader
 
-def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full"): 
+def draw_learning_curve_and_accuracy(losses, accs, epoch="", best_val=None, save=False, save_name=""): 
+    plt.clf()
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+    train_losses, valid_losses, full_valid_losses, trainlikevalid_losses = losses
+    train_accs, valid_accs, full_valid_accs, trainlikevalid_accs = accs
+
+    # Plot Loss on the left subplot
+    ax1.plot(train_losses, label='Train')
+    ax1.plot(valid_losses, label='Valid')
+    ax1.plot(full_valid_losses, label='Full Valid')
+    ax1.plot(trainlikevalid_losses, label="Trainlike Valid")
+    ax1.set_title("Learning Curve Loss" + f" {epoch}")
+    ax1.legend(loc="upper right")
+
+    # Plot Accuracy on the right subplot
+    ax2.plot(train_accs, label='Train')
+    ax2.plot(valid_accs, label='Valid')
+    ax2.plot(full_valid_accs, label='Full Valid')
+    ax2.plot(trainlikevalid_accs, label="Trainlike Valid")
+    ax2.set_title('Learning Curve Accuracy' + f" {epoch}")
+    ax2.legend(loc="lower right")
+
+    # Display the plots
+    plt.tight_layout()
+    plt.xlabel("Epoch")
+    display.clear_output(wait=True)
+    display.display(plt.gcf())
+    if save: 
+        plt.savefig(save_name)
+
+
+def add_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full"): 
     model_save_dir = os.path.join(hyper_dir, model_type, sel, f"{pretype}{posttype}")
-    mk(model_save_dir)
+    assert PU.path_exist(model_save_dir)
 
     # Loss Recording
+    trainlikevalid_loss = ListRecorder(os.path.join(model_save_dir, "trainlikevalid.loss"))
+    trainlikevalid_accs = ListRecorder(os.path.join(model_save_dir, "trainlikevalid.acc"))
+
     train_losses = ListRecorder(os.path.join(model_save_dir, "train.loss"))
     valid_losses = ListRecorder(os.path.join(model_save_dir, "valid.loss"))
     full_valid_losses = ListRecorder(os.path.join(model_save_dir, "full_valid.loss"))
     train_accs = ListRecorder(os.path.join(model_save_dir, "train.acc"))
     valid_accs = ListRecorder(os.path.join(model_save_dir, "valid.acc"))
     full_valid_accs = ListRecorder(os.path.join(model_save_dir, "full_valid.acc"))
-    special_recs = DictRecorder(os.path.join(model_save_dir, "special.hst"))
+
+    train_losses.read()
+    valid_losses.read()
+    full_valid_losses.read()
+    train_accs.read()
+    valid_accs.read()
+    full_valid_accs.read()
 
     # Initialize Model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -132,66 +165,36 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
         model = MediumNetwork()
     else:
         model = LargeNetwork()
-    # model= nn.DataParallel(model)
-    # model = nn.DataParallel(model, device_ids=[0, 1])
+
     model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    model_str = str(model)
-    model_txt_path = os.path.join(model_save_dir, "model.txt")
-    with open(model_txt_path, "w") as f:
-        f.write(model_str)
-        f.write("\n")
-        f.write(str(summary(model, input_size=(128, 1, 64, 21))))
 
     # Load Data (I&II)
-    train_loader_1 = load_data(type=pretype, sel="full", load="train")
-    valid_loader_1 = load_data(type=pretype, sel=sel, load="valid")
-    train_loader_2 = load_data(type=posttype, sel="full", load="train")
-    valid_loader_2 = load_data(type=posttype, sel=sel, load="valid")
+    trainlikevalid_loader_1 = load_data(type=pretype, sel="full", load="valid")
+    trainlikevalid_loader_2 = load_data(type=posttype, sel="full", load="valid")
+    # trainlikevalid is the valid content but filtered following the training set and is having the full phone range. 
     # In this way, we get training data will both consonants and vowels, but validation data with only either consonants or vowels. 
     # But the sound range always follows the pretype and posttype settings. 
 
     # Train (I)
-    best_valid_loss = 1e9
-    best_valid_loss_epoch = 0
     EPOCHS = 20
     BASE = 0
 
     for epoch in range(BASE, BASE + EPOCHS):
-        model.train()
-        train_loss = 0.
-        train_num = len(train_loader_1)    # train_loader
-        train_correct = 0
-        train_total = 0
-        for idx, (x, y) in enumerate(train_loader_1):
-            optimizer.zero_grad()
-            x = x.to(device)
-            # y = torch.tensor(y, device=device)
-            y = y.to(device)
-
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
-            train_loss += loss.item()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=5, norm_type=2)
-            optimizer.step()
-            pred = model.predict_on_output(y_hat)
-            train_total += y_hat.size(0)
-            train_correct += (pred == y).sum().item()
-            # draw_progress_bar(idx, train_num, title="Train")
-
-        train_losses.append(train_loss / train_num)
-        train_accs.append(train_correct / train_total)
-        last_model_name = f"{epoch}.pt"
-        torch.save(model.state_dict(), os.path.join(model_save_dir, last_model_name))
+        # load model
+        model_name = "{}.pt".format(epoch)
+        model_path = os.path.join(model_save_dir, model_name)
+        state = torch.load(model_path)
+        model.load_state_dict(state)
+        model.to(device)
 
         # Target Eval
         model.eval()
         valid_loss = 0.
-        valid_num = len(valid_loader_1)
+        valid_num = len(trainlikevalid_loader_1)
         valid_correct = 0
         valid_total = 0
-        for idx, (x, y) in enumerate(valid_loader_1):
+        for idx, (x, y) in enumerate(trainlikevalid_loader_1):
             x = x.to(device)
             y = y.to(device)
 
@@ -205,95 +208,37 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
             valid_correct += (pred == y).sum().item()
 
         avg_valid_loss = valid_loss / valid_num
-        valid_losses.append(avg_valid_loss)
-        valid_accs.append(valid_correct / valid_total)
-        if avg_valid_loss < best_valid_loss: 
-            best_valid_loss = avg_valid_loss
-            best_valid_loss_epoch = epoch
+        trainlikevalid_loss.append(avg_valid_loss)
+        trainlikevalid_accs.append(valid_correct / valid_total)
 
-        # Full Eval
-        model.eval()
-        full_valid_loss = 0.
-        full_valid_num = len(valid_loader_2)
-        full_valid_correct = 0
-        full_valid_total = 0
-        for idx, (x, y) in enumerate(valid_loader_2):
-            x = x.to(device)
-            y = y.to(device)
+        trainlikevalid_loss.save()
+        trainlikevalid_accs.save()
 
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
-            full_valid_loss += loss.item()
-
-            pred = model.predict_on_output(y_hat)
-
-            full_valid_total += y_hat.size(0)
-            full_valid_correct += (pred == y).sum().item()
-
-        full_valid_losses.append(full_valid_loss / full_valid_num)
-        full_valid_accs.append(full_valid_correct / full_valid_total)
-
-        train_losses.save()
-        valid_losses.save()
-        full_valid_losses.save()
-        train_accs.save()
-        valid_accs.save()
-        full_valid_accs.save()
-
-        if epoch % 5 == 0:
-            draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get(), best_valid_loss_epoch), 
-                                    accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
-                                    epoch=str(epoch), 
-                                    save=True, 
-                                    save_name=f"{model_save_dir}/vis.png")
-
-    draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get(), best_valid_loss_epoch), 
-                                    accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
+    draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get(), trainlikevalid_loss.get()), 
+                                    accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get(), trainlikevalid_accs.get()),
                                     epoch=str(BASE + EPOCHS - 1), 
                                     save=True, 
                                     save_name=f"{model_save_dir}/vis.png")
     
-    # Pre Model Best
-    special_recs.append(("preval_epoch", best_valid_loss_epoch))
-    special_recs.save()
 
     # Train (II)
     BASE = BASE + EPOCHS
     EPOCHS = 20
     for epoch in range(BASE, BASE + EPOCHS):
-        model.train()
-        train_loss = 0.
-        train_num = len(train_loader_2)    # train_loader
-        train_correct = 0
-        train_total = 0
-        for idx, (x, y) in enumerate(train_loader_2):
-            optimizer.zero_grad()
-            x = x.to(device)
-            y = y.to(device)
-
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
-            train_loss += loss.item()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=5, norm_type=2)
-            optimizer.step()
-            pred = model.predict_on_output(y_hat)
-            train_total += y_hat.size(0)
-            train_correct += (pred == y).sum().item()
-            # draw_progress_bar(idx, train_num, title="Train")
-
-        train_losses.append(train_loss / train_num)
-        train_accs.append(train_correct / train_total)
-        last_model_name = f"{epoch}.pt"
-        torch.save(model.state_dict(), os.path.join(model_save_dir, last_model_name))
+        # load model
+        model_name = "{}.pt".format(epoch)
+        model_path = os.path.join(model_save_dir, model_name)
+        state = torch.load(model_path)
+        model.load_state_dict(state)
+        model.to(device)
 
         # Target Eval
         model.eval()
         valid_loss = 0.
-        valid_num = len(valid_loader_2)
+        valid_num = len(trainlikevalid_loader_2)
         valid_correct = 0
         valid_total = 0
-        for idx, (x, y) in enumerate(valid_loader_2):
+        for idx, (x, y) in enumerate(trainlikevalid_loader_2):
             x = x.to(device)
             y = y.to(device)
 
@@ -308,37 +253,18 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
 
 
         avg_valid_loss = valid_loss / valid_num
-        valid_losses.append(avg_valid_loss)
-        full_valid_losses.append(avg_valid_loss)
-        valid_accs.append(valid_correct / valid_total)
-        full_valid_accs.append(valid_correct / valid_total)
-        if avg_valid_loss < best_valid_loss: 
-            best_valid_loss = avg_valid_loss
-            best_valid_loss_epoch = epoch
+        trainlikevalid_loss.append(avg_valid_loss)
+        trainlikevalid_accs.append(valid_correct / valid_total)
 
-        train_losses.save()
-        valid_losses.save()
-        full_valid_losses.save()
-        train_accs.save()
-        valid_accs.save()
-        full_valid_accs.save()
+        trainlikevalid_loss.save()
+        trainlikevalid_accs.save()
 
-        if epoch % 5 == 0:
-            draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get(), best_valid_loss_epoch), 
-                                    accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
-                                    epoch=str(epoch), 
-                                    save=True, 
-                                    save_name=f"{model_save_dir}/vis.png")
-
-    draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get(), best_valid_loss_epoch), 
-                                    accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
+    draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get(), trainlikevalid_loss.get()), 
+                                    accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get(), trainlikevalid_accs.get()),
                                     epoch=str(BASE + EPOCHS - 1), 
                                     save=True, 
                                     save_name=f"{model_save_dir}/vis.png")
-    
-    # Post Model Best
-    special_recs.append(("postval_epoch", best_valid_loss_epoch))
-    special_recs.save()
+
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser(description='argparse')
@@ -355,10 +281,10 @@ if __name__ == "__main__":
         ## Hyper-preparations
         # ts = str(get_timestamp())
         ts = args.timestamp
-        train_name = "H18"
+        train_name = "H12"
         model_save_dir = os.path.join(model_save_, f"{train_name}-{ts}")
         print(f"{train_name}-{ts}")
-        mk(model_save_dir) 
+        assert PU.path_exist(model_save_dir)
 
         if args.dataprepare: 
             ### Get Data (Not Loading)
@@ -407,8 +333,4 @@ if __name__ == "__main__":
                 print(len(use_train_ds), len(use_valid_ds))
         else: 
             torch.cuda.set_device(args.gpu)
-            run_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select)
-        # for model_type in ["small", "medium", "large"]: # "small", "medium", 
-        #     run_once(model_save_dir, model_type=model_type, pretype="f", posttype="f")
-        #     run_once(model_save_dir, model_type=model_type, pretype="l", posttype="f")
-        #     run_once(model_save_dir, model_type=model_type, pretype="h", posttype="f")
+            add_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select)
