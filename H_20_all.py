@@ -1,14 +1,9 @@
-### Consonant and Vowel separated
-### Why? In one paper it is reported that preterm babies have attenuated performance only on vowels. 
-### In H_09, we will train using both consonants and vowels, but for testing only either of them. 
-### Also, we want to unify the running of models. We will name the models with names Small, Medium, Large, and place them in models. 
-
-### However, it seems that directly training on mix and test on either of them is not working. 
-### We will take a closer look into the each category under the mix. 
-
-### In this runner, we will use mix to train and C/V to test. 
-
-### H18: this one 
+"""
+H20: 
+This runner will try to run this on multiple models: CNN(current), RNN and Linear. 
+Since the running logic is all the same, and the only difference lies in the model structure, 
+we mainly change the model, while keeping the in and outs all the same. 
+"""
 
 # All in Runner
 ## Importing the libraries
@@ -24,7 +19,7 @@ import random
 from torchinfo import summary
 import torch.nn.functional as F
 from torch.nn import init
-from H_10_models import SmallNetwork, MediumNetwork, LargeNetwork
+from H_10_models import SmallNetwork, MediumNetwork, LargeNetwork, ResLinearNetwork, LSTMNetwork
 from model_configs import ModelDimConfigs, TrainingConfigs
 from misc_tools import get_timestamp, ARPABET
 from model_dataset import DS_Tools, Padder, TokenMap, NormalizerKeepShape
@@ -164,8 +159,14 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
         model = SmallNetwork()
     elif model_type == "medium":
         model = MediumNetwork()
-    else:
+    elif model_type == "large": 
         model = LargeNetwork()
+    elif model_type == "reslin": 
+        model = ResLinearNetwork()
+    elif model_type == "lstm": 
+        model = LSTMNetwork()
+    else:
+        raise Exception("Model not defined! ")
     # model= nn.DataParallel(model)
     # model = nn.DataParallel(model, device_ids=[0, 1])
     model.to(device)
