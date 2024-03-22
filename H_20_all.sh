@@ -12,8 +12,8 @@ generate_random_number() {
 
 # Arrays of options for each argument
 ps=('f' 'l' 'h')
-ms=('reslin')
-ss=('c' 'v')
+ms=('lstm')
+ss=('full')
 
 # Generate a 10-digit random number
 ts=$(date +"%m%d%H%M%S")
@@ -23,7 +23,7 @@ echo "Timestamp: $ts"
 # Loop from 1 to 10, incrementing by 1
 for (( i=1; i<=10; i++ )); do
     # Loop over each combination of arguments
-    python H_15_cvcv.py -ts "$ts-$i" -dp
+    python H_20_all.py -ts "$ts-$i" -dp
     for p in "${ps[@]}"; do
         for m in "${ms[@]}"; do
             for s in "${ss[@]}"; do
