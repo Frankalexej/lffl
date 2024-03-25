@@ -138,7 +138,7 @@ def draw_learning_curve_and_accuracy(losses, accs, epoch="", best_val=None, save
         plt.savefig(save_name)
 
 def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full", preepochs=20, postepochs=20): 
-    model_save_dir = os.path.join(hyper_dir, model_type, sel, f"{pretype}{posttype}")
+    model_save_dir = os.path.join(hyper_dir, f"{model_type}-{preepochs}-{postepochs}", sel, f"{pretype}{posttype}")
     mk(model_save_dir)
 
     # Loss Recording
@@ -329,18 +329,18 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
         valid_accs.save()
         full_valid_accs.save()
 
-        if epoch % 5 == 0:
+        if epoch % 10 == 0:
             draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get()), 
                                     accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
                                     epoch=str(epoch), 
                                     save=True, 
                                     save_name=f"{model_save_dir}/vis.png")
 
-    draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get()), 
-                                    accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
-                                    epoch=str(BASE + preepochs - 1), 
-                                    save=True, 
-                                    save_name=f"{model_save_dir}/vis.png")
+    # draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get()), 
+    #                                 accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
+    #                                 epoch=str(BASE + preepochs - 1), 
+    #                                 save=True, 
+    #                                 save_name=f"{model_save_dir}/vis.png")
     
     # Pre Model Best
     special_recs.append(("preval_epoch", best_valid_loss_epoch))
@@ -411,7 +411,7 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
         valid_accs.save()
         full_valid_accs.save()
 
-        if epoch % 5 == 0:
+        if epoch % 10 == 0:
             draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get()), 
                                     accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
                                     epoch=str(epoch), 
@@ -436,8 +436,8 @@ if __name__ == "__main__":
     parser.add_argument('--model','-m',type=str, default = "large",help="Model type: small, medium, large, and others")
     parser.add_argument('--pretype','-p',type=str, default="f", help='Pretraining data type')
     parser.add_argument('--select','-s',type=str, default="full", help='Select full, consonants or vowels')
-    parser.add_argument('--preepochs','-pree',type=int, default=20, help='Number of epochs in pre-training')
-    parser.add_argument('--postepochs','-poste',type=int, default=20, help='Number of epochs in post-training')
+    # parser.add_argument('--preepochs','-pree',type=int, default=20, help='Number of epochs in pre-training')
+    # parser.add_argument('--postepochs','-poste',type=int, default=20, help='Number of epochs in post-training')
 
     args = parser.parse_args()
     RUN_TIMES = 1
@@ -497,4 +497,6 @@ if __name__ == "__main__":
                 print(len(use_train_ds), len(use_valid_ds))
         else: 
             torch.cuda.set_device(args.gpu)
-            run_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select)
+            for preepoch in [25, 30]: 
+                run_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select, 
+                         preepochs=preepoch, postepochs=(40 - preepoch))
