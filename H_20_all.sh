@@ -12,7 +12,7 @@ generate_random_number() {
 
 # Arrays of options for each argument
 ps=('f' 'l' 'h')
-ms=('lstm')
+ms=('large')
 ss=('full')
 
 # Generate a 10-digit random number
