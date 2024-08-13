@@ -249,7 +249,8 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     for epoch in range(BASE, BASE + preepochs):
         model.train()
         train_loss = 0.
-        train_num = len(train_loader_1)    # train_loader
+        # train_num = len(train_loader_1)    # train_loader
+        train_num = 0
         train_correct = 0
         train_total = 0
         for idx, (x, y) in enumerate(train_loader_1):
@@ -267,60 +268,68 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
             pred = model.predict_on_output(y_hat)
             train_total += y_hat.size(0)
             train_correct += (pred == y).sum().item()
+            train_num += 1
             # draw_progress_bar(idx, train_num, title="Train")
 
-        train_losses.append(train_loss / train_num)
-        train_accs.append(train_correct / train_total)
+            if (idx + 1) % 50 == 0: 
+                train_losses.append(train_loss / train_num)
+                train_accs.append(train_correct / train_total)
+                # set all to 0 after recording the data
+                train_loss = 0
+                train_num = 0
+                train_correct = 0
+                train_total = 0
+
+                # Target Eval
+                model.eval()
+                valid_loss = 0.
+                valid_num = len(valid_loader_1)
+                valid_correct = 0
+                valid_total = 0
+                for idx, (x, y) in enumerate(valid_loader_1):
+                    x = x.to(device)
+                    y = y.to(device)
+
+                    y_hat = model(x)
+                    loss = criterion(y_hat, y)
+                    valid_loss += loss.item()
+
+                    pred = model.predict_on_output(y_hat)
+
+                    valid_total += y_hat.size(0)
+                    valid_correct += (pred == y).sum().item()
+
+                avg_valid_loss = valid_loss / valid_num
+                valid_losses.append(avg_valid_loss)
+                valid_accs.append(valid_correct / valid_total)
+                if avg_valid_loss < best_valid_loss: 
+                    best_valid_loss = avg_valid_loss
+                    best_valid_loss_epoch = epoch
+
+                # Full Eval
+                model.eval()
+                full_valid_loss = 0.
+                full_valid_num = len(valid_loader_2)
+                full_valid_correct = 0
+                full_valid_total = 0
+                for idx, (x, y) in enumerate(valid_loader_2):
+                    x = x.to(device)
+                    y = y.to(device)
+
+                    y_hat = model(x)
+                    loss = criterion(y_hat, y)
+                    full_valid_loss += loss.item()
+
+                    pred = model.predict_on_output(y_hat)
+
+                    full_valid_total += y_hat.size(0)
+                    full_valid_correct += (pred == y).sum().item()
+
+                full_valid_losses.append(full_valid_loss / full_valid_num)
+                full_valid_accs.append(full_valid_correct / full_valid_total)
+
         last_model_name = f"{epoch}.pt"
         torch.save(model.state_dict(), os.path.join(model_save_dir, last_model_name))
-
-        # Target Eval
-        model.eval()
-        valid_loss = 0.
-        valid_num = len(valid_loader_1)
-        valid_correct = 0
-        valid_total = 0
-        for idx, (x, y) in enumerate(valid_loader_1):
-            x = x.to(device)
-            y = y.to(device)
-
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
-            valid_loss += loss.item()
-
-            pred = model.predict_on_output(y_hat)
-
-            valid_total += y_hat.size(0)
-            valid_correct += (pred == y).sum().item()
-
-        avg_valid_loss = valid_loss / valid_num
-        valid_losses.append(avg_valid_loss)
-        valid_accs.append(valid_correct / valid_total)
-        if avg_valid_loss < best_valid_loss: 
-            best_valid_loss = avg_valid_loss
-            best_valid_loss_epoch = epoch
-
-        # Full Eval
-        model.eval()
-        full_valid_loss = 0.
-        full_valid_num = len(valid_loader_2)
-        full_valid_correct = 0
-        full_valid_total = 0
-        for idx, (x, y) in enumerate(valid_loader_2):
-            x = x.to(device)
-            y = y.to(device)
-
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
-            full_valid_loss += loss.item()
-
-            pred = model.predict_on_output(y_hat)
-
-            full_valid_total += y_hat.size(0)
-            full_valid_correct += (pred == y).sum().item()
-
-        full_valid_losses.append(full_valid_loss / full_valid_num)
-        full_valid_accs.append(full_valid_correct / full_valid_total)
 
         train_losses.save()
         valid_losses.save()
@@ -351,7 +360,8 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     for epoch in range(BASE, BASE + postepochs):
         model.train()
         train_loss = 0.
-        train_num = len(train_loader_2)    # train_loader
+        # train_num = len(train_loader_2)    # train_loader
+        train_num = 0
         train_correct = 0
         train_total = 0
         for idx, (x, y) in enumerate(train_loader_2):
@@ -368,41 +378,49 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
             pred = model.predict_on_output(y_hat)
             train_total += y_hat.size(0)
             train_correct += (pred == y).sum().item()
+            train_num += 1
             # draw_progress_bar(idx, train_num, title="Train")
 
-        train_losses.append(train_loss / train_num)
-        train_accs.append(train_correct / train_total)
+            if idx % 50 == 0: 
+                train_losses.append(train_loss / train_num)
+                train_accs.append(train_correct / train_total)
+                # set all to 0 after recording the data
+                train_loss = 0
+                train_num = 0
+                train_correct = 0
+                train_total = 0
+
+                # Target Eval
+                model.eval()
+                valid_loss = 0.
+                valid_num = len(valid_loader_2)
+                valid_correct = 0
+                valid_total = 0
+                for idx, (x, y) in enumerate(valid_loader_2):
+                    x = x.to(device)
+                    y = y.to(device)
+
+                    y_hat = model(x)
+                    loss = criterion(y_hat, y)
+                    valid_loss += loss.item()
+
+                    pred = model.predict_on_output(y_hat)
+
+                    valid_total += y_hat.size(0)
+                    valid_correct += (pred == y).sum().item()
+
+
+                avg_valid_loss = valid_loss / valid_num
+                valid_losses.append(avg_valid_loss)
+                full_valid_losses.append(avg_valid_loss)
+                valid_accs.append(valid_correct / valid_total)
+                full_valid_accs.append(valid_correct / valid_total)
+                if avg_valid_loss < best_valid_loss: 
+                    best_valid_loss = avg_valid_loss
+                    best_valid_loss_epoch = epoch
+
         last_model_name = f"{epoch}.pt"
         torch.save(model.state_dict(), os.path.join(model_save_dir, last_model_name))
-
-        # Target Eval
-        model.eval()
-        valid_loss = 0.
-        valid_num = len(valid_loader_2)
-        valid_correct = 0
-        valid_total = 0
-        for idx, (x, y) in enumerate(valid_loader_2):
-            x = x.to(device)
-            y = y.to(device)
-
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
-            valid_loss += loss.item()
-
-            pred = model.predict_on_output(y_hat)
-
-            valid_total += y_hat.size(0)
-            valid_correct += (pred == y).sum().item()
-
-
-        avg_valid_loss = valid_loss / valid_num
-        valid_losses.append(avg_valid_loss)
-        full_valid_losses.append(avg_valid_loss)
-        valid_accs.append(valid_correct / valid_total)
-        full_valid_accs.append(valid_correct / valid_total)
-        if avg_valid_loss < best_valid_loss: 
-            best_valid_loss = avg_valid_loss
-            best_valid_loss_epoch = epoch
 
         train_losses.save()
         valid_losses.save()
@@ -500,4 +518,4 @@ if __name__ == "__main__":
             torch.cuda.set_device(args.gpu)
             for preepoch in [0, 1]: # , 2, 3, 4, 5, 10, 15, 20
                 run_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select, 
-                         preepochs=preepoch, postepochs=(5 - preepoch))
+                         preepochs=preepoch, postepochs=(3 - preepoch))
