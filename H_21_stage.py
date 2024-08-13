@@ -436,8 +436,8 @@ if __name__ == "__main__":
     parser.add_argument('--model','-m',type=str, default = "large",help="Model type: small, medium, large, and others")
     parser.add_argument('--pretype','-p',type=str, default="f", help='Pretraining data type')
     parser.add_argument('--select','-s',type=str, default="full", help='Select full, consonants or vowels')
-    # parser.add_argument('--preepochs','-pree',type=int, default=20, help='Number of epochs in pre-training')
-    # parser.add_argument('--postepochs','-poste',type=int, default=20, help='Number of epochs in post-training')
+    parser.add_argument('--preepochs','-pree',type=int, default=20, help='Number of epochs in pre-training')
+    parser.add_argument('--postepochs','-poste',type=int, default=20, help='Number of epochs in post-training')
 
     args = parser.parse_args()
     RUN_TIMES = 1
@@ -465,10 +465,11 @@ if __name__ == "__main__":
 
             mymap = TokenMap(mylist)
 
-
+            # NOTE: 20240813: decided to use very small number of training material
+            # V1: 10% of original = 0.001
             for select, savename, use_proportion in zip([select_consonants, select_vowels, select_full], 
                                                                     ["c", "v", "full"], 
-                                                                    [0.01, 0.02, 0.01]):
+                                                                    [0.001, 0.002, 0.001]):
                 train_ds = ThisDataset(strain_cut_audio_, 
                                     os.path.join(suse_, "guide_train.csv"), 
                                     select=select, 
@@ -497,6 +498,6 @@ if __name__ == "__main__":
                 print(len(use_train_ds), len(use_valid_ds))
         else: 
             torch.cuda.set_device(args.gpu)
-            for preepoch in [25, 30]: 
+            for preepoch in [0, 1, 2, 3, 4, 5, 10, 15, 20]: 
                 run_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select, 
                          preepochs=preepoch, postepochs=(40 - preepoch))

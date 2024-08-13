@@ -12,13 +12,13 @@ generate_random_number() {
 
 # Arrays of options for each argument
 ps=('l' 'h')
-ms=('reslin' 'lstm')
+ms=('large' 'reslin' 'lstm')
 pres=(0 1 2 3 4 5 10 15 20)
 ss=('full')
 
 # Generate a 10-digit random number
-# ts=$(date +"%m%d%H%M%S")
-ts="0324233831"
+ts=$(date +"%m%d%H%M%S")
+# ts="0324233831"
 echo "Timestamp: $ts"
 # ts="0121181130"
 
