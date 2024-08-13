@@ -381,7 +381,7 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
             train_num += 1
             # draw_progress_bar(idx, train_num, title="Train")
 
-            if idx % 50 == 0: 
+            if (idx + 1) % 50 == 0: 
                 train_losses.append(train_loss / train_num)
                 train_accs.append(train_correct / train_total)
                 # set all to 0 after recording the data
