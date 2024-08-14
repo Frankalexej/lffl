@@ -482,6 +482,8 @@ if __name__ == "__main__":
             select_full = mylist
 
             mymap = TokenMap(mylist)
+            with open(os.path.join(model_save_dir, f"README.remarks"), "w") as remarks: 
+                remarks.write("Miniepoch every 50 batches; SmallNetwork; 0, 1, 2")
 
             # NOTE: 20240813: decided to use very small number of training material
             # V1: 10% of original = 0.001
