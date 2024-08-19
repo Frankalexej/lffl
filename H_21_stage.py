@@ -172,7 +172,8 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     # model= nn.DataParallel(model)
     # model = nn.DataParallel(model, device_ids=[0, 1])
     model.to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    # NOTE: 20240819 changed lr from 1e-3 to 1e-5 so as to observe learning differences (potentially)
+    optimizer = optim.Adam(model.parameters(), lr=1e-5)
     model_str = str(model)
     model_txt_path = os.path.join(model_save_dir, "model.txt")
     with open(model_txt_path, "w") as f:
@@ -464,6 +465,8 @@ if __name__ == "__main__":
             select_full = mylist
 
             mymap = TokenMap(mylist)
+            with open(os.path.join(model_save_dir, f"README.remarks"), "w") as remarks: 
+                remarks.write("Normal epoch; lr=1e-3 -> lr=1e-5; LargeNetwork, Reslin, LSTM; 012345 10 15 20 25 30; until 70 epochs")
 
             # NOTE: 20240813: decided to use very small number of training material
             # V1: 10% of original = 0.001
@@ -498,6 +501,6 @@ if __name__ == "__main__":
                 print(len(use_train_ds), len(use_valid_ds))
         else: 
             torch.cuda.set_device(args.gpu)
-            for preepoch in [0, 1]: # , 2, 3, 4, 5, 10, 15, 20
+            for preepoch in [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30]: # , 2, 3, 4, 5, 10, 15, 20
                 run_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select, 
-                         preepochs=preepoch, postepochs=(5 - preepoch))
+                         preepochs=preepoch, postepochs=(70 - preepoch))

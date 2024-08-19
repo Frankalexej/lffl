@@ -11,10 +11,10 @@ generate_random_number() {
 }
 
 # Arrays of options for each argument
-ps=('l' 'h')
-ms=('large')
-pres=(0 1 2 3 4 5 10 15 20)
-ss=('full')
+ps=('l' 'h') # 
+ms=('large' 'reslin' 'lstm') # 
+pres=(0 1 2 3 4 5 10 15 20 25 30)
+ss=('c' 'v') # 
 
 # Generate a 10-digit random number
 ts=$(date +"%m%d%H%M%S")
@@ -26,16 +26,16 @@ echo "Timestamp: $ts"
 # Loop from 1 to 10, incrementing by 1
 for (( i=1; i<=5; i++ )); do
     # Loop over each combination of arguments
-    python H_21_stage_miniepoch.py -ts "$ts-$i" -dp
+    python H_21_stage.py -ts "$ts-$i" -dp
     for p in "${ps[@]}"; do
         for m in "${ms[@]}"; do
             for s in "${ss[@]}"; do
                 # Randomly select a GPU between 0 and 8
                 gpu=$((RANDOM % 9))
-                post=$((40 - pre))
+                post=$((55 - pre))
 
                 # Run the Python script with the current combination of arguments in the background
-                python H_21_stage_miniepoch.py -ts "$ts-$i" -p "$p" -m "$m" -s "$s" -gpu "$gpu" &
+                python H_21_stage.py -ts "$ts-$i" -p "$p" -m "$m" -s "$s" -gpu "$gpu" &
             done
         done
     done
