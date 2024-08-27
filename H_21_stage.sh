@@ -36,7 +36,7 @@ for (( i=1; i<=5; i++ )); do
                 # post=$((55 - pre))
 
                 # Run the Python script with the current combination of arguments in the background
-                python H_21_stage_corun.py -ts "$ts-$i" -p "$p" -s "$s" -m "$m" -gpu "$gpu" &
+                python H_21_stage.py -ts "$ts-$i" -p "$p" -s "$s" -m "$m" -gpu "$gpu" &
             done
         done
     done
