@@ -502,7 +502,7 @@ if __name__ == "__main__":
         else: 
             torch.cuda.set_device(args.gpu)
             # model_types = ['large', 'reslin', 'lstm']
-            for preepoch in [2, 3, 4, 5, 20, 25, 30]: # 10, 15, 20, 25, 30
+            for preepoch in [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30]: # 10, 15, 20, 25, 30
             # for model_type in model_types: 
                 run_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select, 
-                         preepochs=preepoch, postepochs=(70 - preepoch))
+                         preepochs=preepoch, postepochs=(100 - preepoch))
