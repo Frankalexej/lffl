@@ -21,11 +21,12 @@ ts=$(date +"%m%d%H%M%S")
 # ts="0324233831"
 # ts="0813184725"
 # ts="0827104709"
+ts="0905160507"
 echo "Timestamp: $ts"
 # ts="0121181130"
 
 # Loop from 1 to 10, incrementing by 1
-for (( i=1; i<=10; i++ )); do
+for (( i=11; i<=15; i++ )); do
     # Loop over each combination of arguments
     python H_21_stage.py -ts "$ts-$i" -dp
     for p in "${ps[@]}"; do
