@@ -194,7 +194,7 @@ class SingleRecSelectBalanceDatasetPrecombine(Dataset):
         balanced_df = df.loc[balanced_indices].reset_index(drop=True)
 
         return balanced_df
-    
+
 
 class SingleRecSmallDatasetPrecombine(Dataset): 
     def __init__(self, src_dir, guide_, select=[], mapper=None, transform=None): 
@@ -1483,15 +1483,28 @@ class Normalizer(nn.Module):
     def norm_pcen(mel_spec):
         return mel_spec
     
+class NormalizerKeepShapeManual(nn.Module): 
+    def __init__(self, mean=None, std=None):
+        super().__init__()
+        self.mean = mean
+        self.std = std
+    
+    def forward(self, mel_spec):
+        eps = 1e-9
+        norm_spec = (mel_spec - self.mean) / (self.std + eps)
+        return norm_spec
+
 
 class NormalizerKeepShape(nn.Module):
     # this normalizer will work on mels that keep the shape as (channel, F, L) 
     # strip: normalize and reduce along the frequency axis
     # time: normalize and reduce along the time axis
     # -: global normalization across whole mel
-    def __init__(self, fun):
+    def __init__(self, fun, mean=None, std=None):
         super().__init__()
         self.fun = fun
+        self.mean = mean
+        self.std = std
     
     def forward(self, mel_spec):
         return self.fun(mel_spec)

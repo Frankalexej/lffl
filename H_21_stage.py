@@ -24,7 +24,7 @@ from torch.nn import init
 from H_10_models import SmallNetwork, MediumNetwork, LargeNetwork, ResLinearNetwork, LSTMNetwork
 from model_configs import ModelDimConfigs, TrainingConfigs
 from misc_tools import get_timestamp, ARPABET
-from model_dataset import DS_Tools, Padder, TokenMap, NormalizerKeepShape
+from model_dataset import DS_Tools, Padder, TokenMap, NormalizerKeepShapeManual
 from model_dataset import SingleRecSelectBalanceDatasetPrecombine as ThisDataset
 from model_filter import XpassFilter
 from paths import *
@@ -37,6 +37,12 @@ import argparse
 
 # Data Loader
 def load_data(type="f", sel="full", load="train"):
+    # Load MV_config
+    with open(os.path.join(src_, "mv_config_20.pkl"), "rb") as file: 
+        mv_config = pickle.load(file)
+
+    normalize_mean, normalize_std = mv_config["mean"], mv_config["std"]
+
     if type == "l":
         mytrans = nn.Sequential(
             Padder(sample_rate=TrainingConfigs.REC_SAMPLE_RATE, pad_len_ms=250, noise_level=1e-4), 
@@ -46,7 +52,7 @@ def load_data(type="f", sel="full", load="train"):
                                                 n_fft=TrainingConfigs.N_FFT, 
                                                 power=2), 
             torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-            NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+            NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
         )
     elif type == "h": 
         mytrans = nn.Sequential(
@@ -57,7 +63,7 @@ def load_data(type="f", sel="full", load="train"):
                                                 n_fft=TrainingConfigs.N_FFT, 
                                                 power=2), 
             torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-            NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+            NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
         )
     else: 
         mytrans = nn.Sequential(
@@ -67,7 +73,7 @@ def load_data(type="f", sel="full", load="train"):
                                                 n_fft=TrainingConfigs.N_FFT, 
                                                 power=2), 
             torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-            NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+            NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
         )
     with open(os.path.join(src_, "no-stress-seg.dict"), "rb") as file:
         # Load the object from the file
