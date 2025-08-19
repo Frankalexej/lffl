@@ -185,15 +185,15 @@ class CNNAutoencoder(nn.Module):
 
         self.encoder_conv = nn.Sequential(
             nn.Conv2d(1, n_filter_1, kernel_size=kernel_size, stride=1, padding=padding), 
-            #nn.BatchNorm2d(n_filter_1), 
+            nn.BatchNorm2d(n_filter_1), 
             nn.ReLU(), 
             nn.MaxPool2d(kernel_size=pool_size, stride=1), 
             nn.Conv2d(n_filter_1, n_filter_2, kernel_size=kernel_size, stride=1, padding=padding), 
-            #nn.BatchNorm2d(n_filter_2), 
+            nn.BatchNorm2d(n_filter_2), 
             nn.ReLU(), 
             nn.MaxPool2d(kernel_size=pool_size, stride=pool_size), 
             nn.Conv2d(n_filter_2, n_filter_3, kernel_size=kernel_size, stride=1, padding=padding), 
-            #nn.BatchNorm2d(n_filter_3), 
+            nn.BatchNorm2d(n_filter_3), 
             nn.ReLU(), 
             nn.MaxPool2d(kernel_size=pool_size, stride=pool_size)
         )
@@ -213,15 +213,15 @@ class CNNAutoencoder(nn.Module):
         self.decoder_conv = nn.Sequential(
             nn.Upsample(scale_factor=pool_size, mode='nearest'),
             nn.Conv2d(n_filter_3, n_filter_2, kernel_size=kernel_size, stride=1, padding=padding),
-            #nn.BatchNorm2d(n_filter_2), 
+            nn.BatchNorm2d(n_filter_2), 
             nn.ReLU(), 
             nn.Upsample(scale_factor=pool_size, mode='nearest'),
             nn.Conv2d(n_filter_2, n_filter_1, kernel_size=kernel_size, stride=1, padding=padding),
-            #nn.BatchNorm2d(n_filter_1), 
+            nn.BatchNorm2d(n_filter_1), 
             nn.ReLU(), 
             nn.Upsample(scale_factor=pool_size, mode='nearest'),
             nn.Conv2d(n_filter_1, 1, kernel_size=kernel_size, stride=1, padding=padding),
-            #nn.BatchNorm2d(1), 
+            nn.BatchNorm2d(1), 
             nn.Sigmoid()
         )
 

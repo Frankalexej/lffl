@@ -218,6 +218,8 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
         NOTE: we need to use table to store the data for each token's real and clustered label (!!!!!!! MAYBE IT WILL NOT GIVE A LABEL. IN THAT CASE WE WOULD JUST INCLUDE THE WHOLE AND NOT INDIVIDUAL TOKENS.)
 
         The modification is the same for all such loops, including training and testing ones. 
+
+        TODO: modify each loop: change input shape to (x, y, target); save hidden representation; 
         """
         x = x.to(device)
         y = y.to(device)
