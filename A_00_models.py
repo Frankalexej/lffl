@@ -105,7 +105,7 @@ class MediumNetwork(nn.Module):
         preds = torch.argmax(output, dim=1)
         return preds
     
-# Large Model
+# Large Model: we used this - 20250819
 class LargeNetwork(nn.Module):
     def __init__(self):
         super().__init__()
