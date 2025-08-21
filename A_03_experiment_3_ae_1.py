@@ -135,7 +135,46 @@ def draw_learning_curve_and_accuracy(losses, accs, epoch="", best_val=None, save
     if save: 
         plt.savefig(save_name)
 
-def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full"): 
+def kmeans_evaluate(X, Y, n_clusters=None, n_init=20, random_state=0, compute_sil=True):
+    if n_clusters is None:
+        n_clusters = len(np.unique(Y))
+    km = KMeans(n_clusters=n_clusters, n_init=n_init, random_state=random_state)
+    cluster_ids = km.fit_predict(X)
+    acc = clustering_accuracy(Y, cluster_ids)
+    sil = silhouette_score(X, cluster_ids) if compute_sil and len(np.unique(cluster_ids)) > 1 else None
+    return {
+        "kmeans_acc": acc,
+        "silhouette": sil,
+        "cluster_counts": np.bincount(cluster_ids, minlength=n_clusters)
+    }
+def concat_func(z, y): 
+    return np.concatenate(z, axis=0), np.concatenate(y, axis=0)
+    
+def save_eval_func(z, y, name, epoch, save_eval=True): 
+    if save_eval: 
+        np.save(os.path.join(f"{epoch:04d}_{name}_z.npy"), z)
+        np.save(os.path.join(f"{epoch:04d}_{name}_y.npy"), y)
+
+def special_on_site_eval_func(z, y, rec, name, on_site_eval)
+    if on_site_eval: 
+        eval_res = kmeans_evaluate(z, y)
+        acc = eval_res["kmeans_acc"]
+        rec.append(("notrain-target-acc", acc))
+
+def on_site_eval_func(z, y, rec, on_site_eval)
+    if on_site_eval: 
+        eval_res = kmeans_evaluate(z, y)
+        acc = eval_res["kmeans_acc"]
+        rec.append(acc)
+
+def on_site_eval_func_multi(z, y, recs, on_site_eval)
+    if on_site_eval: 
+        eval_res = kmeans_evaluate(z, y)
+        acc = eval_res["kmeans_acc"]
+        for rec in recs: 
+            rec.append(acc)
+
+def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full", on_site_eval=False, save_eval=True, eval_train=False): 
     model_save_dir = os.path.join(hyper_dir, model_type, sel, f"{pretype}{posttype}")
     mk(model_save_dir)
 
@@ -194,47 +233,45 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     model.eval()
     valid_loss = 0.
     valid_num = len(valid_loader_1)
-    valid_correct = 0
-    valid_total = 0
+    z_list, y_list = [], []
     for idx, (x, y) in enumerate(valid_loader_1):
         # NOTE: still, x is data, y is label. But instead we will output x_hat, not y_hat. 
         x = x.to(device)
         y = y.to(device)
 
-        y_hat = model(x)
-        loss = criterion(y_hat, y)
+        x_hat, z = model(x, return_latent=True)
+        loss = criterion(x_hat, x) # NOTE: now compare with data (x), not label (y). 
         valid_loss += loss.item()
 
-        pred = model.predict_on_output(y_hat)
-
-        valid_total += y_hat.size(0)
-        valid_correct += (pred == y).sum().item()
+        z_list.append(z.detach().cpu().numpy())
+        y_list.append(y.detach().cpu().numpy())
 
     special_recs.append(("notrain-target-loss", valid_loss / valid_num))
-    special_recs.append(("notrain-target-acc", valid_correct / valid_total))
+    z_all, y_all = concat_func(z_list, y_list)
+    save_eval_func(z_all, y_all, "valid", 0, save_eval)
+    special_on_site_eval_func(z_all, y_all, special_recs, "notrain-target-acc", on_site_eval)
     special_recs.save()
 
     # Full Eval
     model.eval()
-    full_valid_loss = 0.
+    full_valid_loss = 0.0
     full_valid_num = len(valid_loader_2)
-    full_valid_correct = 0
-    full_valid_total = 0
+    z_list, y_list = [], []
     for idx, (x, y) in enumerate(valid_loader_2):
         x = x.to(device)
         y = y.to(device)
 
-        y_hat = model(x)
-        loss = criterion(y_hat, y)
+        x_hat, z = model(x, return_latent=True)
+        loss = criterion(x_hat, x)
         full_valid_loss += loss.item()
-
-        pred = model.predict_on_output(y_hat)
-
-        full_valid_total += y_hat.size(0)
-        full_valid_correct += (pred == y).sum().item()
+        
+        z_list.append(z.detach().cpu().numpy())
+        y_list.append(y.detach().cpu().numpy())
 
     special_recs.append(("notrain-full-loss", full_valid_loss / full_valid_num))
-    special_recs.append(("notrain-full-acc", full_valid_correct / full_valid_total))
+    z_all, y_all = concat_func(z_list, y_list)
+    save_eval_func(z_all, y_all, "full_valid", 0, save_eval)
+    special_on_site_eval_func(z_all, y_all, special_recs, "notrain-full-acc", on_site_eval)
     special_recs.save()
 
     # Train (I)
@@ -247,27 +284,28 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
         model.train()
         train_loss = 0.
         train_num = len(train_loader_1)    # train_loader
-        train_correct = 0
-        train_total = 0
+        z_list, y_list = [], []
         for idx, (x, y) in enumerate(train_loader_1):
             optimizer.zero_grad()
             x = x.to(device)
             # y = torch.tensor(y, device=device)
             y = y.to(device)
 
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
+            x_hat, z = model(x, return_latent=True)
+            loss = criterion(x_hat, x)
             train_loss += loss.item()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=5, norm_type=2)
             optimizer.step()
-            pred = model.predict_on_output(y_hat)
-            train_total += y_hat.size(0)
-            train_correct += (pred == y).sum().item()
-            # draw_progress_bar(idx, train_num, title="Train")
+            if eval_train: 
+                z_list.append(z.detach().cpu().numpy())
+                y_list.append(y.detach().cpu().numpy())
 
         train_losses.append(train_loss / train_num)
-        train_accs.append(train_correct / train_total)
+        if eval_train: 
+            z_all, y_all = concat_func(z_list, y_list)
+            save_eval_func(z_all, y_all, "train", epoch, save_eval)
+            on_site_eval_func(z_all, y_all, train_accs, on_site_eval)
         last_model_name = f"{epoch}.pt"
         torch.save(model.state_dict(), os.path.join(model_save_dir, last_model_name))
 
@@ -275,24 +313,23 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
         model.eval()
         valid_loss = 0.
         valid_num = len(valid_loader_1)
-        valid_correct = 0
-        valid_total = 0
+        z_list, y_list = [], []
         for idx, (x, y) in enumerate(valid_loader_1):
             x = x.to(device)
             y = y.to(device)
 
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
+            x_hat, z = model(x, return_latent=True)
+            loss = criterion(x_hat, x)
             valid_loss += loss.item()
-
-            pred = model.predict_on_output(y_hat)
-
-            valid_total += y_hat.size(0)
-            valid_correct += (pred == y).sum().item()
+            z_list.append(z.detach().cpu().numpy())
+            y_list.append(y.detach().cpu().numpy())
 
         avg_valid_loss = valid_loss / valid_num
         valid_losses.append(avg_valid_loss)
-        valid_accs.append(valid_correct / valid_total)
+        z_all, y_all = concat_func(z_list, y_list)
+        save_eval_func(z_all, y_all, "valid", epoch, save_eval)
+        on_site_eval_func(z_all, y_all, valid_accs, on_site_eval)
+        
         if avg_valid_loss < best_valid_loss: 
             best_valid_loss = avg_valid_loss
             best_valid_loss_epoch = epoch
@@ -301,23 +338,21 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
         model.eval()
         full_valid_loss = 0.
         full_valid_num = len(valid_loader_2)
-        full_valid_correct = 0
-        full_valid_total = 0
+        z_list, y_list = [], []
         for idx, (x, y) in enumerate(valid_loader_2):
             x = x.to(device)
             y = y.to(device)
 
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
+            x_hat, z = model(x, return_latent=True)
+            loss = criterion(x_hat, x)
             full_valid_loss += loss.item()
-
-            pred = model.predict_on_output(y_hat)
-
-            full_valid_total += y_hat.size(0)
-            full_valid_correct += (pred == y).sum().item()
+            z_list.append(z.detach().cpu().numpy())
+            y_list.append(y.detach().cpu().numpy())
 
         full_valid_losses.append(full_valid_loss / full_valid_num)
-        full_valid_accs.append(full_valid_correct / full_valid_total)
+        z_all, y_all = concat_func(z_list, y_list)
+        save_eval_func(z_all, y_all, "full_valid", epoch, save_eval)
+        on_site_eval_func(z_all, y_all, full_valid_accs, on_site_eval)
 
         train_losses.save()
         valid_losses.save()
@@ -350,54 +385,53 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
         model.train()
         train_loss = 0.
         train_num = len(train_loader_2)    # train_loader
-        train_correct = 0
-        train_total = 0
+        z_list, y_list = [], []
         for idx, (x, y) in enumerate(train_loader_2):
             optimizer.zero_grad()
             x = x.to(device)
             y = y.to(device)
 
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
+            x_hat, z = model(x, return_latent=True)
+            loss = criterion(x_hat, x)
             train_loss += loss.item()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=5, norm_type=2)
             optimizer.step()
-            pred = model.predict_on_output(y_hat)
-            train_total += y_hat.size(0)
-            train_correct += (pred == y).sum().item()
-            # draw_progress_bar(idx, train_num, title="Train")
+            if eval_train: 
+                z_list.append(z.detach().cpu().numpy())
+                y_list.append(y.detach().cpu().numpy())
 
         train_losses.append(train_loss / train_num)
-        train_accs.append(train_correct / train_total)
+        if eval_train: 
+            z_all, y_all = concat_func(z_list, y_list)
+            save_eval_func(z_all, y_all, "train", epoch, save_eval)
+            on_site_eval_func(z_all, y_all, train_accs, on_site_eval)
         last_model_name = f"{epoch}.pt"
         torch.save(model.state_dict(), os.path.join(model_save_dir, last_model_name))
-
+        
         # Target Eval
         model.eval()
         valid_loss = 0.
         valid_num = len(valid_loader_2)
-        valid_correct = 0
-        valid_total = 0
+        z_list, y_list = [], []
         for idx, (x, y) in enumerate(valid_loader_2):
             x = x.to(device)
             y = y.to(device)
 
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
+            x_hat, z = model(x, return_latent=True)
+            loss = criterion(x_hat, x)
             valid_loss += loss.item()
-
-            pred = model.predict_on_output(y_hat)
-
-            valid_total += y_hat.size(0)
-            valid_correct += (pred == y).sum().item()
+            z_list.append(z.detach().cpu().numpy())
+            y_list.append(y.detach().cpu().numpy())
 
 
         avg_valid_loss = valid_loss / valid_num
         valid_losses.append(avg_valid_loss)
         full_valid_losses.append(avg_valid_loss)
-        valid_accs.append(valid_correct / valid_total)
-        full_valid_accs.append(valid_correct / valid_total)
+        z_all, y_all = concat_func(z_list, y_list)
+        save_eval_func(z_all, y_all, "valid", epoch, save_eval) # to save storage, we will not save the same data twice. 
+        on_site_eval_func_multi(z_all, y_all, [valid_accs, full_valid_accs], on_site_eval)
+        
         if avg_valid_loss < best_valid_loss: 
             best_valid_loss = avg_valid_loss
             best_valid_loss_epoch = epoch

@@ -3,6 +3,8 @@ H20:
 This runner will try to run this on multiple models: CNN(current), RNN and Linear. 
 Since the running logic is all the same, and the only difference lies in the model structure, 
 we mainly change the model, while keeping the in and outs all the same. 
+H21: 
+This is staged running. We want to test the effect of number of "pretraining" epochs. 
 """
 
 # All in Runner
@@ -22,7 +24,7 @@ from torch.nn import init
 from H_10_models import SmallNetwork, MediumNetwork, LargeNetwork, ResLinearNetwork, LSTMNetwork
 from model_configs import ModelDimConfigs, TrainingConfigs
 from misc_tools import get_timestamp, ARPABET
-from model_dataset import DS_Tools, Padder, TokenMap, NormalizerKeepShape
+from model_dataset import DS_Tools, Padder, TokenMap, NormalizerKeepShapeManual
 from model_dataset import SingleRecSelectBalanceDatasetPrecombine as ThisDataset
 from model_filter import XpassFilter
 from paths import *
@@ -35,6 +37,12 @@ import argparse
 
 # Data Loader
 def load_data(type="f", sel="full", load="train"):
+    # Load MV_config
+    with open(os.path.join(src_, "mv_config_20.pkl"), "rb") as file: 
+        mv_config = pickle.load(file)
+
+    normalize_mean, normalize_std = mv_config["mean"], mv_config["std"]
+
     if type == "l":
         mytrans = nn.Sequential(
             Padder(sample_rate=TrainingConfigs.REC_SAMPLE_RATE, pad_len_ms=250, noise_level=1e-4), 
@@ -44,7 +52,7 @@ def load_data(type="f", sel="full", load="train"):
                                                 n_fft=TrainingConfigs.N_FFT, 
                                                 power=2), 
             torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-            NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+            NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
         )
     elif type == "h": 
         mytrans = nn.Sequential(
@@ -55,7 +63,7 @@ def load_data(type="f", sel="full", load="train"):
                                                 n_fft=TrainingConfigs.N_FFT, 
                                                 power=2), 
             torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-            NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+            NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
         )
     else: 
         mytrans = nn.Sequential(
@@ -65,7 +73,7 @@ def load_data(type="f", sel="full", load="train"):
                                                 n_fft=TrainingConfigs.N_FFT, 
                                                 power=2), 
             torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-            NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+            NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
         )
     with open(os.path.join(src_, "no-stress-seg.dict"), "rb") as file:
         # Load the object from the file
@@ -135,8 +143,8 @@ def draw_learning_curve_and_accuracy(losses, accs, epoch="", best_val=None, save
     if save: 
         plt.savefig(save_name)
 
-def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full"): 
-    model_save_dir = os.path.join(hyper_dir, model_type, sel, f"{pretype}{posttype}")
+def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full", preepochs=20, postepochs=20): 
+    model_save_dir = os.path.join(hyper_dir, f"{model_type}-{preepochs}-{postepochs}", sel, f"{pretype}{posttype}")
     mk(model_save_dir)
 
     # Loss Recording
@@ -155,7 +163,6 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     # Initialize Model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     criterion = nn.CrossEntropyLoss()
-    # NOTE: this should be changed. But we could instead use alias to keep this the same. 
     if model_type == "small":
         model = SmallNetwork()
     elif model_type == "medium":
@@ -171,6 +178,7 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     # model= nn.DataParallel(model)
     # model = nn.DataParallel(model, device_ids=[0, 1])
     model.to(device)
+    # NOTE: 20240819 changed lr from 1e-3 to 1e-5 so as to observe learning differences (potentially)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     model_str = str(model)
     model_txt_path = os.path.join(model_save_dir, "model.txt")
@@ -189,6 +197,10 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     # In this way, we get training data will both consonants and vowels, but validation data with only either consonants or vowels. 
     # But the sound range always follows the pretype and posttype settings. 
 
+    # this is mainly to get the "improvement" for 
+    # only-full training models, because they naturally
+    # don't have a "transition" from nothing to 
+    # "having been trained on full"
     """No Learning Baseline Get"""
     # Target Eval
     model.eval()
@@ -197,7 +209,18 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     valid_correct = 0
     valid_total = 0
     for idx, (x, y) in enumerate(valid_loader_1):
-        # NOTE: still, x is data, y is label. But instead we will output x_hat, not y_hat. 
+        """
+        Frank note: I haven't changed this yet because I am not yet sure which one was the newest. 
+        However, modification would be straightforward: for the training and testing, we do not need to change the codes; instead, we change the data loader and make the x and y to be the same. This way, accompanied with the changed model, would just work. 
+
+        The pred = model.predict_on_output(y_hat) and the following two lines should be changed to clustering evaluation. This would be saved as accuracy. 
+
+        NOTE: we need to use table to store the data for each token's real and clustered label (!!!!!!! MAYBE IT WILL NOT GIVE A LABEL. IN THAT CASE WE WOULD JUST INCLUDE THE WHOLE AND NOT INDIVIDUAL TOKENS.)
+
+        The modification is the same for all such loops, including training and testing ones. 
+
+        TODO: modify each loop: change input shape to (x, y, target); save hidden representation; 
+        """
         x = x.to(device)
         y = y.to(device)
 
@@ -205,9 +228,9 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
         loss = criterion(y_hat, y)
         valid_loss += loss.item()
 
-        pred = model.predict_on_output(y_hat)
+        pred = model.predict_on_output(y_hat) # change to clustering
 
-        valid_total += y_hat.size(0)
+        valid_total += y_hat.size(0)    # clustering score
         valid_correct += (pred == y).sum().item()
 
     special_recs.append(("notrain-target-loss", valid_loss / valid_num))
@@ -240,10 +263,9 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     # Train (I)
     best_valid_loss = 1e9
     best_valid_loss_epoch = 0
-    EPOCHS = 20
     BASE = 0
 
-    for epoch in range(BASE, BASE + EPOCHS):
+    for epoch in range(BASE, BASE + preepochs):
         model.train()
         train_loss = 0.
         train_num = len(train_loader_1)    # train_loader
@@ -326,27 +348,26 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
         valid_accs.save()
         full_valid_accs.save()
 
-        if epoch % 5 == 0:
+        if epoch % 10 == 0:
             draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get()), 
                                     accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
                                     epoch=str(epoch), 
                                     save=True, 
                                     save_name=f"{model_save_dir}/vis.png")
 
-    draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get()), 
-                                    accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
-                                    epoch=str(BASE + EPOCHS - 1), 
-                                    save=True, 
-                                    save_name=f"{model_save_dir}/vis.png")
+    # draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get()), 
+    #                                 accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
+    #                                 epoch=str(BASE + preepochs - 1), 
+    #                                 save=True, 
+    #                                 save_name=f"{model_save_dir}/vis.png")
     
     # Pre Model Best
     special_recs.append(("preval_epoch", best_valid_loss_epoch))
     special_recs.save()
 
     # Train (II)
-    BASE = BASE + EPOCHS
-    EPOCHS = 20
-    for epoch in range(BASE, BASE + EPOCHS):
+    BASE = BASE + preepochs
+    for epoch in range(BASE, BASE + postepochs):
         model.train()
         train_loss = 0.
         train_num = len(train_loader_2)    # train_loader
@@ -409,7 +430,7 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
         valid_accs.save()
         full_valid_accs.save()
 
-        if epoch % 5 == 0:
+        if epoch % 10 == 0:
             draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get()), 
                                     accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
                                     epoch=str(epoch), 
@@ -418,7 +439,7 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
 
     draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get()), 
                                     accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
-                                    epoch=str(BASE + EPOCHS - 1), 
+                                    epoch=str(BASE + postepochs - 1), 
                                     save=True, 
                                     save_name=f"{model_save_dir}/vis.png")
     
@@ -434,6 +455,8 @@ if __name__ == "__main__":
     parser.add_argument('--model','-m',type=str, default = "large",help="Model type: small, medium, large, and others")
     parser.add_argument('--pretype','-p',type=str, default="f", help='Pretraining data type')
     parser.add_argument('--select','-s',type=str, default="full", help='Select full, consonants or vowels')
+    parser.add_argument('--preepochs','-pree',type=int, default=20, help='Number of epochs in pre-training')
+    parser.add_argument('--postepochs','-poste',type=int, default=20, help='Number of epochs in post-training')
 
     args = parser.parse_args()
     RUN_TIMES = 1
@@ -441,7 +464,7 @@ if __name__ == "__main__":
         ## Hyper-preparations
         # ts = str(get_timestamp())
         ts = args.timestamp
-        train_name = "H20"
+        train_name = "H21"
         model_save_dir = os.path.join(model_save_, f"{train_name}-{ts}")
         print(f"{train_name}-{ts}")
         mk(model_save_dir) 
@@ -460,8 +483,11 @@ if __name__ == "__main__":
             select_full = mylist
 
             mymap = TokenMap(mylist)
+            with open(os.path.join(model_save_dir, f"README.remarks"), "w") as remarks: 
+                remarks.write("Normal epoch; lr=1e-3; LargeNetwork, Reslin, LSTM; 012345 10 15 20 25 30; until 70 epochs")
 
-
+            # NOTE: 20240813: decided to use very small number of training material
+            # V1: 10% of original = 0.001
             for select, savename, use_proportion in zip([select_consonants, select_vowels, select_full], 
                                                                     ["c", "v", "full"], 
                                                                     [0.01, 0.02, 0.01]):
@@ -493,4 +519,8 @@ if __name__ == "__main__":
                 print(len(use_train_ds), len(use_valid_ds))
         else: 
             torch.cuda.set_device(args.gpu)
-            run_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select)
+            # model_types = ['large', 'reslin', 'lstm']
+            for preepoch in [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]: # 10, 15, 20, 25, 30
+            # for model_type in model_types: 
+                run_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select, 
+                         preepochs=preepoch, postepochs=(120 - preepoch))
