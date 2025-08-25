@@ -171,8 +171,7 @@ class CNNAutoencoder(nn.Module):
     - Decoder: linear + three CNN blocks (mirrored)
     - get_representation(x): returns the output of encoder linear
     """
-    def __init__(self, input_shape, hidden_dim, n_filter_base, n_filter_exp,
-                 kernel_size, pool_size, padding, dropout_rate):
+    def __init__(self, input_shape, hidden_dim=256, n_filter_base=4, n_filter_exp=2, dropout_rate=0.5):
         super().__init__()
 
         n_filter_1 = pow(n_filter_base, n_filter_exp)
@@ -180,22 +179,22 @@ class CNNAutoencoder(nn.Module):
         n_filter_3 = pow(n_filter_base, n_filter_exp+2)
 
         self.last_cnn_channel = n_filter_3
-        self.last_cnn_height = input_shape[2] // (pow(pool_size, 3))
-        self.last_cnn_width = input_shape[3] // (pow(pool_size, 3))
+        self.last_cnn_height = input_shape[2] // (pow(2, 3))
+        self.last_cnn_width = input_shape[3] // (pow(2, 3))
 
         self.encoder_conv = nn.Sequential(
-            nn.Conv2d(1, n_filter_1, kernel_size=kernel_size, stride=1, padding=padding), 
+            nn.Conv2d(1, n_filter_1, kernel_size=3, stride=1, padding='same'), 
             nn.BatchNorm2d(n_filter_1), 
             nn.ReLU(), 
-            nn.MaxPool2d(kernel_size=pool_size, stride=1), 
-            nn.Conv2d(n_filter_1, n_filter_2, kernel_size=kernel_size, stride=1, padding=padding), 
+            nn.MaxPool2d(kernel_size=2, stride=2), 
+            nn.Conv2d(n_filter_1, n_filter_2, kernel_size=3, stride=1, padding='same'), 
             nn.BatchNorm2d(n_filter_2), 
             nn.ReLU(), 
-            nn.MaxPool2d(kernel_size=pool_size, stride=pool_size), 
-            nn.Conv2d(n_filter_2, n_filter_3, kernel_size=kernel_size, stride=1, padding=padding), 
+            nn.MaxPool2d(kernel_size=2, stride=2), 
+            nn.Conv2d(n_filter_2, n_filter_3, kernel_size=3, stride=1, padding='same'), 
             nn.BatchNorm2d(n_filter_3), 
             nn.ReLU(), 
-            nn.MaxPool2d(kernel_size=pool_size, stride=pool_size)
+            nn.MaxPool2d(kernel_size=2, stride=2)
         )
         
         self.encoder_fc = nn.Sequential(
@@ -211,16 +210,16 @@ class CNNAutoencoder(nn.Module):
         )
 
         self.decoder_conv = nn.Sequential(
-            nn.Upsample(scale_factor=pool_size, mode='nearest'),
-            nn.Conv2d(n_filter_3, n_filter_2, kernel_size=kernel_size, stride=1, padding=padding),
+            nn.Upsample(scale_factor=2, mode='nearest'),
+            nn.Conv2d(n_filter_3, n_filter_2, kernel_size=3, stride=1, padding='same'),
             nn.BatchNorm2d(n_filter_2), 
             nn.ReLU(), 
-            nn.Upsample(scale_factor=pool_size, mode='nearest'),
-            nn.Conv2d(n_filter_2, n_filter_1, kernel_size=kernel_size, stride=1, padding=padding),
+            nn.Upsample(scale_factor=2, mode='nearest'),
+            nn.Conv2d(n_filter_2, n_filter_1, kernel_size=3, stride=1, padding='same'),
             nn.BatchNorm2d(n_filter_1), 
             nn.ReLU(), 
-            nn.Upsample(scale_factor=pool_size, mode='nearest'),
-            nn.Conv2d(n_filter_1, 1, kernel_size=kernel_size, stride=1, padding=padding),
+            nn.Upsample(scale_factor=2, mode='nearest'),
+            nn.Conv2d(n_filter_1, 1, kernel_size=3, stride=1, padding='same'),
             nn.BatchNorm2d(1), 
             nn.Sigmoid()
         )
@@ -243,20 +242,22 @@ class CNNAutoencoder(nn.Module):
             torch.nn.init.kaiming_normal_(m.weight, a=0.1)
             m.bias.data.zero_()
 
-    def forward(self, x):
+    def forward(self, x, return_latent: bool = False):
         # x_shape = [batch_size, n_channel = 1, height, width]
 
         # encoding
         x = self.dropout(self.encoder_conv(x)) # [batch_size, n_channel = 4^4, height/2^3, width/2^3]
         x = x.view(x.shape[0], -1) # [batch_size, 4^4 * height/2^3 * width/2^3]
-        x = self.encoder_fc(x) # [batch_size, hidden_dim]
+        z = self.encoder_fc(x) # [batch_size, hidden_dim]
 
         # decoding
-        x = self.dropout(self.decoder_fc(x)) # [batch_size, 4^4 * height/2^3 * width/2^3]
-        x = x.view(x.shape[0], self.lastcnn_channel, self.lastcnn_height, self.lastcnn_width) # [batch_size, 4^4, height/2^3, width/2^3]
-        x = self.decoder_conv(x) #[batch_size, 1, height, width]
+        recon = self.dropout(self.decoder_fc(z)) # [batch_size, 4^4 * height/2^3 * width/2^3]
+        recon = recon.view(recon.shape[0], self.last_cnn_channel, self.last_cnn_height, self.last_cnn_width) # [batch_size, 4^4, height/2^3, width/2^3]
+        recon = self.decoder_conv(recon) #[batch_size, 1, height, width]
 
-        return x
+        if return_latent:
+            return recon, z
+        return recon
     
     def get_representation(self, x):
         with torch.no_grad():
@@ -355,16 +356,16 @@ class ResLinearAutoencoder(nn.Module):
     - Decoder: self.final_lin (latent -> input_dim) for reconstruction
     - get_representation(x): returns the hidden rep (output of self.res_blocks)
     """
-    def __init__(self):
+    def __init__(self, input_shape):
         super().__init__()
-        in_size = 64 * 21  # keep your original input flattening convention
-        hidden_sizes = [in_size, 512, 128]  # same style as before
+        in_size = input_shape[2] * input_shape[3]
+        hidden_sizes = [in_size, 512, 128]  # keep your original input flattening convention
 
         # ----- Encoder: same residual stack you had -----
         enc_layers = []
         for i in range(len(hidden_sizes) - 1):
             enc_layers.append(ResidualBlock(hidden_sizes[i], hidden_sizes[i+1]))
-        self.encoder = nn.Sequential(*layers)
+        self.encoder = nn.Sequential(*enc_layers)
 
         # ----- Decoder (mirror) -----
         dec_sizes = hidden_sizes[::-1]          # e.g., [128, 512, in_size]
@@ -388,7 +389,7 @@ class ResLinearAutoencoder(nn.Module):
             m.bias.data.fill_(0.01)
 
     def forward(self, x, return_latent: bool = False):
-        # Remember original (batch-first) shape, e.g. (B, C, D, L) or (B, 1, T)
+        # Remember original (batch-first) shape, e.g. (B, C, D, L)
         orig_shape = x.shape
         # Flatten input exactly like your classifier version
         x_flat = x.view(x.size(0), -1)
@@ -538,7 +539,7 @@ class LSTMAutoencoder(nn.Module):
         recon = self.linear(dec_out)               # (B, L, 64)
 
         # Back to (B, 1, D, L) to match input
-        recon = recon_seq.transpose(1, 2).unsqueeze(1)  # (B, 1, D, L)
+        recon = recon.transpose(1, 2).unsqueeze(1)  # (B, 1, D, L)
 
         if return_latent:
             return recon, z

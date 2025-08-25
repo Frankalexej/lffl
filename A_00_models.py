@@ -171,7 +171,7 @@ class CNNAutoencoder(nn.Module):
     - Decoder: linear + three CNN blocks (mirrored)
     - get_representation(x): returns the output of encoder linear
     """
-    def __init__(self, input_shape, hidden_dim=256, n_filter_base=4, n_filter_exp=2, dropout_rate=0.2):
+    def __init__(self, input_shape, hidden_dim=256, n_filter_base=4, n_filter_exp=2, dropout_rate=0.5):
         super().__init__()
 
         n_filter_1 = pow(n_filter_base, n_filter_exp)
@@ -186,7 +186,7 @@ class CNNAutoencoder(nn.Module):
             nn.Conv2d(1, n_filter_1, kernel_size=3, stride=1, padding='same'), 
             nn.BatchNorm2d(n_filter_1), 
             nn.ReLU(), 
-            nn.MaxPool2d(kernel_size=2, stride=1), 
+            nn.MaxPool2d(kernel_size=2, stride=2), 
             nn.Conv2d(n_filter_1, n_filter_2, kernel_size=3, stride=1, padding='same'), 
             nn.BatchNorm2d(n_filter_2), 
             nn.ReLU(), 
@@ -242,20 +242,22 @@ class CNNAutoencoder(nn.Module):
             torch.nn.init.kaiming_normal_(m.weight, a=0.1)
             m.bias.data.zero_()
 
-    def forward(self, x):
+    def forward(self, x, return_latent: bool = False):
         # x_shape = [batch_size, n_channel = 1, height, width]
 
         # encoding
         x = self.dropout(self.encoder_conv(x)) # [batch_size, n_channel = 4^4, height/2^3, width/2^3]
         x = x.view(x.shape[0], -1) # [batch_size, 4^4 * height/2^3 * width/2^3]
-        x = self.encoder_fc(x) # [batch_size, hidden_dim]
+        z = self.encoder_fc(x) # [batch_size, hidden_dim]
 
         # decoding
-        x = self.dropout(self.decoder_fc(x)) # [batch_size, 4^4 * height/2^3 * width/2^3]
-        x = x.view(x.shape[0], self.lastcnn_channel, self.lastcnn_height, self.lastcnn_width) # [batch_size, 4^4, height/2^3, width/2^3]
-        x = self.decoder_conv(x) #[batch_size, 1, height, width]
+        recon = self.dropout(self.decoder_fc(z)) # [batch_size, 4^4 * height/2^3 * width/2^3]
+        recon = recon.view(recon.shape[0], self.last_cnn_channel, self.last_cnn_height, self.last_cnn_width) # [batch_size, 4^4, height/2^3, width/2^3]
+        recon = self.decoder_conv(recon) #[batch_size, 1, height, width]
 
-        return x
+        if return_latent:
+            return recon, z
+        return recon
     
     def get_representation(self, x):
         with torch.no_grad():
