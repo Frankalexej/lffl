@@ -250,45 +250,45 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     eval_saver = EvalSaver(model_save_dir)
 
     # Initialize Model
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # criterion = nn.MSELoss()
-    # input_shape = (128, 1, 64, 32)
-    # if model_type == "cnn": 
-    #     model = CNNAutoencoder(input_shape=input_shape)
-    # elif model_type == "reslin": 
-    #     model = ResLinearAutoencoder(input_shape=input_shape)
-    # elif model_type == "lstm": 
-    #     model = LSTMAutoencoder()
-    # else:
-    #     raise Exception("Model not defined! ")
-    # model.to(device)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    criterion = nn.MSELoss()
+    input_shape = (128, 1, 64, 32)
+    if model_type == "cnn": 
+        model = CNNAutoencoder(input_shape=input_shape)
+    elif model_type == "reslin": 
+        model = ResLinearAutoencoder(input_shape=input_shape)
+    elif model_type == "lstm": 
+        model = LSTMAutoencoder()
+    else:
+        raise Exception("Model not defined! ")
+    model.to(device)
 
     # Load Data (I&II)
-    # train_loader_1 = load_data(type=pretype, sel="full", load="train")
-    # valid_loader_1 = load_data(type=pretype, sel=sel, load="valid") # target 
-    # train_loader_2 = load_data(type=posttype, sel="full", load="train")
-    # valid_loader_2 = load_data(type=posttype, sel=sel, load="valid")    # full = trainlike (because this time we don't separate c/v)
+    train_loader_1 = load_data(type=pretype, sel="full", load="train")
+    valid_loader_1 = load_data(type=pretype, sel=sel, load="valid") # target 
+    train_loader_2 = load_data(type=posttype, sel="full", load="train")
+    valid_loader_2 = load_data(type=posttype, sel=sel, load="valid")    # full = trainlike (because this time we don't separate c/v)
 
     """No Learning Baseline Get"""
-    valid_z, valid_y = eval_saver.read_eval_func("valid", 9999) # to make sure the file is there.
-    full_valid_z, full_valid_y = eval_saver.read_eval_func("full_valid", 9999)
+    # valid_z, valid_y = eval_saver.read_eval_func("valid", 9999) # to make sure the file is there.
+    # full_valid_z, full_valid_y = eval_saver.read_eval_func("full_valid", 9999)
     # Target Eval
-    # model.eval()
-    # valid_loss = 0.
-    # valid_num = len(valid_loader_1)
-    # z_list, y_list = [], []
-    # for idx, (x, y) in enumerate(valid_loader_1):
-    #     # NOTE: still, x is data, y is label. But instead we will output x_hat, not y_hat. 
-    #     x = x.to(device)
-    #     y = y.to(device)
+    model.eval()
+    valid_loss = 0.
+    valid_num = len(valid_loader_1)
+    z_list, y_list = [], []
+    for idx, (x, y) in enumerate(valid_loader_1):
+        # NOTE: still, x is data, y is label. But instead we will output x_hat, not y_hat. 
+        x = x.to(device)
+        y = y.to(device)
 
-    #     x_hat, z = model(x, return_latent=True)
+        x_hat, z = model(x, return_latent=True)
 
-    #     z_list.append(z.detach().cpu().numpy())
-    #     y_list.append(y.detach().cpu().numpy())
+        z_list.append(z.detach().cpu().numpy())
+        y_list.append(y.detach().cpu().numpy())
 
-    # z_all, y_all = concat_func(z_list, y_list)
-    # eval_saver.save_eval_func(valid_z, valid_y, "valid", 9999, save_eval)
+    valid_z, valid_y = concat_func(z_list, y_list)
+    eval_saver.save_eval_func(valid_z, valid_y, "valid", 9999, save_eval)
     res = kmeans_evaluate(valid_z, valid_y, n_clusters=38, epoch=9999, model_save_dir=model_save_dir, name="valid")
     valid_accs.append(res["kmeans_acc"])
     valid_sils.append(res["silhouette"])
@@ -296,21 +296,21 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     valid_dbis.append(res["davies_bouldin_score"])
 
     # Full Eval
-    # model.eval()
-    # full_valid_loss = 0.0
-    # full_valid_num = len(valid_loader_2)
-    # z_list, y_list = [], []
-    # for idx, (x, y) in enumerate(valid_loader_2):
-    #     x = x.to(device)
-    #     y = y.to(device)
+    model.eval()
+    full_valid_loss = 0.0
+    full_valid_num = len(valid_loader_2)
+    z_list, y_list = [], []
+    for idx, (x, y) in enumerate(valid_loader_2):
+        x = x.to(device)
+        y = y.to(device)
 
-    #     x_hat, z = model(x, return_latent=True)
+        x_hat, z = model(x, return_latent=True)
         
-    #     z_list.append(z.detach().cpu().numpy())
-    #     y_list.append(y.detach().cpu().numpy())
+        z_list.append(z.detach().cpu().numpy())
+        y_list.append(y.detach().cpu().numpy())
 
-    # z_all, y_all = concat_func(z_list, y_list)
-    # eval_saver.save_eval_func(z_all, y_all, "full_valid", 9999, save_eval)
+    full_valid_z, full_valid_y = concat_func(z_list, y_list)
+    eval_saver.save_eval_func(full_valid_z, full_valid_y, "full_valid", 9999, save_eval)
     res = kmeans_evaluate(full_valid_z, full_valid_y, n_clusters=38, 
                           epoch=9999, model_save_dir=model_save_dir, name="full_valid")
     full_valid_accs.append(res["kmeans_acc"])
@@ -361,7 +361,7 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
 
     # Train (II)
     BASE = BASE + preepochs
-    real_postepochs = 15
+    real_postepochs = 30
     for epoch in range(BASE, BASE + real_postepochs):
         print(f"Epoch {epoch}")
         valid_z, valid_y = eval_saver.read_eval_func("valid", epoch) # to make sure the file is there.
@@ -479,9 +479,9 @@ if __name__ == "__main__":
             torch.cuda.set_device(args.gpu)
             runnumber = args.runnumber
             # model_types = ['large', 'reslin', 'lstm']
-            for preepoch in [15]: # 10, 15, 20, 25, 30, 0, , 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60
+            for preepoch in [0]: # 10, 15, 20, 25, 30, 0, , 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60
                 print(f"Model {args.model}, PreEpoch {preepoch}, PreType {args.pretype}")
-                if preepoch == 0 and args.pretype != "h": 
+                if preepoch == 0 and args.pretype != "l": 
                     print("Skip hf for 0 preepoch")
                     continue
             # for model_type in model_types: 

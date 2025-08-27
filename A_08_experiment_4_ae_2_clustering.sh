@@ -11,7 +11,7 @@ generate_random_number() {
 }
 
 # Arrays of options for each argument
-ps=('l' 'h') # 'h'
+ps=('l') # 'h'
 ms=('cnn' 'reslin' 'lstm') # 'reslin' 'lstm'
 pres=(0 1 2 3 4 5 10 15 20 25 30)
 ss=('full') # 
