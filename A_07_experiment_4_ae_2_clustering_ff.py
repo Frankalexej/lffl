@@ -16,6 +16,11 @@ from torch.utils.data import DataLoader, random_split
 import torchaudio
 import pandas as pd
 import numpy as np
+from sklearn.cluster import KMeans
+from scipy.optimize import linear_sum_assignment
+from sklearn.metrics import confusion_matrix, silhouette_score, adjusted_rand_score, davies_bouldin_score
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 import random
 from torchinfo import summary
@@ -118,25 +123,16 @@ def load_data(type="f", sel="full", load="train"):
                                 num_workers=TrainingConfigs.LOADER_WORKER)
         return valid_loader
 
-def draw_learning_curve_and_accuracy(losses, accs, epoch="", best_val=None, save=False, save_name=""): 
+def draw_learning_curve_and_accuracy_new(data, type_names, task_names, epoch="", best_val=None, save=False, save_name=""): 
     plt.clf()
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-    train_losses, valid_losses, full_valid_losses = losses
-    train_accs, valid_accs, full_valid_accs = accs
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
-    # Plot Loss on the left subplot
-    ax1.plot(train_losses, label='Train')
-    ax1.plot(valid_losses, label='Valid')
-    ax1.plot(full_valid_losses, label='Full Valid')
-    ax1.set_title("Learning Curve Loss" + f" {epoch}")
-    ax1.legend(loc="upper right")
-
-    # Plot Accuracy on the right subplot
-    ax2.plot(train_accs, label='Train')
-    ax2.plot(valid_accs, label='Valid')
-    ax2.plot(full_valid_accs, label='Full Valid')
-    ax2.set_title('Learning Curve Accuracy' + f" {epoch}")
-    ax2.legend(loc="lower right")
+    for task_id, task_name in enumerate(task_name): 
+        ax = axes[task_id // 2, task_id % 2]
+        for type_id, type_name in enumerate(type_names): 
+            values = data[type_id][task_id]
+            ax.plot(values, label=type_name)
+        ax.set_title(f'Learning Curve {task_name}' + f" {epoch}")
 
     # Display the plots
     plt.tight_layout()
@@ -146,17 +142,58 @@ def draw_learning_curve_and_accuracy(losses, accs, epoch="", best_val=None, save
     if save: 
         plt.savefig(save_name)
 
-def kmeans_evaluate(X, Y, n_clusters=None, n_init=20, random_state=0, compute_sil=True):
+def draw_learning_curve_and_accuracy(accs, epoch="", best_val=None, save=False, save_name=""): 
+    plt.clf()
+    fig, (ax1) = plt.subplots(1, 1, figsize=(6, 4))
+    valid_accs, full_valid_accs = accs
+
+    # Plot Accuracy on the right subplot
+    ax1.plot(valid_accs, label='Valid')
+    ax1.plot(full_valid_accs, label='Full Valid')
+    ax1.set_title('Learning Curve Silhouette Score' + f" {epoch}")
+    ax1.legend(loc="lower right")
+
+    # Display the plots
+    plt.tight_layout()
+    plt.xlabel("Epoch")
+    display.clear_output(wait=True)
+    display.display(plt.gcf())
+    if save: 
+        plt.savefig(save_name)
+
+def clustering_accuracy(y_true, y_pred):
+    # Compute the confusion matrix
+    cm = confusion_matrix(y_true, y_pred)
+    # Use the Hungarian algorithm to find the best assignment
+    row_ind, col_ind = linear_sum_assignment(-cm)
+    # Calculate the accuracy
+    accuracy = cm[row_ind, col_ind].sum() / y_true.size
+    return accuracy
+
+def kmeans_evaluate(X, Y, n_clusters=50, n_init=20, random_state=0, epoch=0, model_save_dir="", name=""):
     if n_clusters is None:
         n_clusters = len(np.unique(Y))
-    km = KMeans(n_clusters=n_clusters, n_init=n_init, random_state=random_state)
-    cluster_ids = km.fit_predict(X)
+    X_std = StandardScaler().fit_transform(X)
+    pca = PCA(n_components=96, random_state=random_state)
+    X_pca = pca.fit_transform(X_std)
+    # X_pca = X
+    km = KMeans(n_clusters=n_clusters, n_init=n_init, random_state=random_state, 
+                max_iter=200, algorithm="elkan", init="k-means++", tol=1e-3)
+    cluster_ids = km.fit_predict(X_pca)
     acc = clustering_accuracy(Y, cluster_ids)
-    sil = silhouette_score(X, cluster_ids) if compute_sil and len(np.unique(cluster_ids)) > 1 else None
+    # acc = 0
+    sil = silhouette_score(X_pca, cluster_ids)
+    # sil = 0
+    ari = adjusted_rand_score(Y, cluster_ids)
+    # ari = 0
+    dbi = davies_bouldin_score(X_pca, cluster_ids)
+
+    np.save(os.path.join(model_save_dir, f"{epoch:04d}_{name}_y_pred.npy"), cluster_ids)
     return {
         "kmeans_acc": acc,
         "silhouette": sil,
-        "cluster_counts": np.bincount(cluster_ids, minlength=n_clusters)
+        "adjusted_rand_index": ari, 
+        "davies_bouldin_score": dbi
     }
 def concat_func(z, y): 
     return np.concatenate(z, axis=0), np.concatenate(y, axis=0)
@@ -169,6 +206,11 @@ class EvalSaver:
         if save_eval: 
             np.save(os.path.join(self.model_save_dir, f"{epoch:04d}_{name}_z.npy"), z)
             np.save(os.path.join(self.model_save_dir, f"{epoch:04d}_{name}_y.npy"), y)
+    
+    def read_eval_func(self, name, epoch): 
+        z = np.load(os.path.join(self.model_save_dir, f"{epoch:04d}_{name}_z.npy"))
+        y = np.load(os.path.join(self.model_save_dir, f"{epoch:04d}_{name}_y.npy"))
+        return z, y
 
 def special_on_site_eval_func(z, y, rec, name, on_site_eval): 
     if on_site_eval: 
@@ -193,104 +235,99 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     model_save_dir = os.path.join(hyper_dir, f"{model_type}-{preepochs}-{postepochs}", sel, f"{pretype}{posttype}")
     mk(model_save_dir)
 
-    # Loss Recording
-    train_losses = ListRecorder(os.path.join(model_save_dir, "train.loss"))
-    valid_losses = ListRecorder(os.path.join(model_save_dir, "valid.loss"))
-    full_valid_losses = ListRecorder(os.path.join(model_save_dir, "full_valid.loss"))
-    trainlikevalid_losses = ListRecorder(os.path.join(model_save_dir, "trainlikevalid.loss"))
-
-    train_accs = ListRecorder(os.path.join(model_save_dir, "train.acc"))
     valid_accs = ListRecorder(os.path.join(model_save_dir, "valid.acc"))
     full_valid_accs = ListRecorder(os.path.join(model_save_dir, "full_valid.acc"))
-    trainlikevalid_accs = ListRecorder(os.path.join(model_save_dir, "trainlikevalid.acc"))
+
+    valid_sils = ListRecorder(os.path.join(model_save_dir, "valid.sil"))
+    full_valid_sils = ListRecorder(os.path.join(model_save_dir, "full_valid.sil"))
+
+    valid_aris = ListRecorder(os.path.join(model_save_dir, "valid.ari"))
+    full_valid_aris = ListRecorder(os.path.join(model_save_dir, "full_valid.ari"))
+
+    valid_dbis = ListRecorder(os.path.join(model_save_dir, "valid.dbi"))
+    full_valid_dbis = ListRecorder(os.path.join(model_save_dir, "full_valid.dbi"))
 
     special_recs = DictRecorder(os.path.join(model_save_dir, "special.hst"))
 
     eval_saver = EvalSaver(model_save_dir)
 
     # Initialize Model
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    criterion = nn.MSELoss()
-    input_shape = (128, 1, 64, 32)
-    if model_type == "cnn": 
-        model = CNNAutoencoder(input_shape=input_shape)
-    elif model_type == "reslin": 
-        model = ResLinearAutoencoder(input_shape=input_shape)
-    elif model_type == "lstm": 
-        model = LSTMAutoencoder()
-    else:
-        raise Exception("Model not defined! ")
-    # model= nn.DataParallel(model)
-    # model = nn.DataParallel(model, device_ids=[0, 1])
-    model.to(device)
-    # NOTE: 20240819 changed lr from 1e-3 to 1e-5 so as to observe learning differences (potentially)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    model_str = str(model)
-    model_txt_path = os.path.join(model_save_dir, "model.txt")
-    with open(model_txt_path, "w") as f:
-        f.write(model_str)
-        f.write("\n")
-        f.write(str(summary(model, input_size=input_shape)))
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # criterion = nn.MSELoss()
+    # input_shape = (128, 1, 64, 32)
+    # if model_type == "cnn": 
+    #     model = CNNAutoencoder(input_shape=input_shape)
+    # elif model_type == "reslin": 
+    #     model = ResLinearAutoencoder(input_shape=input_shape)
+    # elif model_type == "lstm": 
+    #     model = LSTMAutoencoder()
+    # else:
+    #     raise Exception("Model not defined! ")
+    # model.to(device)
 
     # Load Data (I&II)
-    train_loader_1 = load_data(type=pretype, sel="full", load="train")
-    valid_loader_1 = load_data(type=pretype, sel=sel, load="valid") # target 
-    train_loader_2 = load_data(type=posttype, sel="full", load="train")
-    valid_loader_2 = load_data(type=posttype, sel=sel, load="valid")    # full = trainlike (because this time we don't separate c/v)
-    # trainlikevalid_loader_1 = load_data(type=pretype, sel="full", load="valid")
-    # trainlikevalid_loader_2 = load_data(type=posttype, sel="full", load="valid")
-    # In this way, we get training data will both consonants and vowels, but validation data with only either consonants or vowels. 
-    # But the sound range always follows the pretype and posttype settings. 
+    # train_loader_1 = load_data(type=pretype, sel="full", load="train")
+    # valid_loader_1 = load_data(type=pretype, sel=sel, load="valid") # target 
+    # train_loader_2 = load_data(type=posttype, sel="full", load="train")
+    # valid_loader_2 = load_data(type=posttype, sel=sel, load="valid")    # full = trainlike (because this time we don't separate c/v)
 
-    # this is mainly to get the "improvement" for 
-    # only-full training models, because they naturally
-    # don't have a "transition" from nothing to 
-    # "having been trained on full"
     """No Learning Baseline Get"""
+    valid_z, valid_y = eval_saver.read_eval_func("valid", 9999) # to make sure the file is there.
+    full_valid_z, full_valid_y = eval_saver.read_eval_func("full_valid", 9999)
     # Target Eval
-    model.eval()
-    valid_loss = 0.
-    valid_num = len(valid_loader_1)
-    z_list, y_list = [], []
-    for idx, (x, y) in enumerate(valid_loader_1):
-        # NOTE: still, x is data, y is label. But instead we will output x_hat, not y_hat. 
-        x = x.to(device)
-        y = y.to(device)
+    # model.eval()
+    # valid_loss = 0.
+    # valid_num = len(valid_loader_1)
+    # z_list, y_list = [], []
+    # for idx, (x, y) in enumerate(valid_loader_1):
+    #     # NOTE: still, x is data, y is label. But instead we will output x_hat, not y_hat. 
+    #     x = x.to(device)
+    #     y = y.to(device)
 
-        x_hat, z = model(x, return_latent=True)
-        loss = criterion(x_hat, x) # NOTE: now compare with data (x), not label (y). 
-        valid_loss += loss.item()
+    #     x_hat, z = model(x, return_latent=True)
 
-        z_list.append(z.detach().cpu().numpy())
-        y_list.append(y.detach().cpu().numpy())
+    #     z_list.append(z.detach().cpu().numpy())
+    #     y_list.append(y.detach().cpu().numpy())
 
-    special_recs.append(("notrain-target-loss", valid_loss / valid_num))
-    z_all, y_all = concat_func(z_list, y_list)
-    eval_saver.save_eval_func(z_all, y_all, "valid", 9999, save_eval)
-    special_on_site_eval_func(z_all, y_all, special_recs, "notrain-target-acc", on_site_eval)
-    special_recs.save()
+    # z_all, y_all = concat_func(z_list, y_list)
+    # eval_saver.save_eval_func(valid_z, valid_y, "valid", 9999, save_eval)
+    res = kmeans_evaluate(valid_z, valid_y, n_clusters=50, epoch=9999, model_save_dir=model_save_dir, name="valid")
+    valid_accs.append(res["kmeans_acc"])
+    valid_sils.append(res["silhouette"])
+    valid_aris.append(res["adjusted_rand_index"])
+    valid_dbis.append(res["davies_bouldin_score"])
 
     # Full Eval
-    model.eval()
-    full_valid_loss = 0.0
-    full_valid_num = len(valid_loader_2)
-    z_list, y_list = [], []
-    for idx, (x, y) in enumerate(valid_loader_2):
-        x = x.to(device)
-        y = y.to(device)
+    # model.eval()
+    # full_valid_loss = 0.0
+    # full_valid_num = len(valid_loader_2)
+    # z_list, y_list = [], []
+    # for idx, (x, y) in enumerate(valid_loader_2):
+    #     x = x.to(device)
+    #     y = y.to(device)
 
-        x_hat, z = model(x, return_latent=True)
-        loss = criterion(x_hat, x)
-        full_valid_loss += loss.item()
+    #     x_hat, z = model(x, return_latent=True)
         
-        z_list.append(z.detach().cpu().numpy())
-        y_list.append(y.detach().cpu().numpy())
+    #     z_list.append(z.detach().cpu().numpy())
+    #     y_list.append(y.detach().cpu().numpy())
 
-    special_recs.append(("notrain-full-loss", full_valid_loss / full_valid_num))
-    z_all, y_all = concat_func(z_list, y_list)
-    eval_saver.save_eval_func(z_all, y_all, "full_valid", 9999, save_eval)
-    special_on_site_eval_func(z_all, y_all, special_recs, "notrain-full-acc", on_site_eval)
-    special_recs.save()
+    # z_all, y_all = concat_func(z_list, y_list)
+    # eval_saver.save_eval_func(z_all, y_all, "full_valid", 9999, save_eval)
+    res = kmeans_evaluate(full_valid_z, full_valid_y, n_clusters=50, 
+                          epoch=9999, model_save_dir=model_save_dir, name="full_valid")
+    full_valid_accs.append(res["kmeans_acc"])
+    full_valid_sils.append(res["silhouette"])
+    full_valid_aris.append(res["adjusted_rand_index"])
+    full_valid_dbis.append(res["davies_bouldin_score"])
+
+    valid_accs.save()
+    full_valid_accs.save()
+    valid_sils.save()
+    full_valid_sils.save()
+    valid_aris.save()
+    full_valid_aris.save()
+    valid_dbis.save()
+    full_valid_dbis.save()
 
     # Train (I)
     best_valid_loss = 1e9
@@ -298,185 +335,75 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     BASE = 0
 
     for epoch in range(BASE, BASE + preepochs):
-        model.train()
-        train_loss = 0.
-        train_num = len(train_loader_1)    # train_loader
-        z_list, y_list = [], []
-        for idx, (x, y) in enumerate(train_loader_1):
-            optimizer.zero_grad()
-            x = x.to(device)
-            # y = torch.tensor(y, device=device)
-            y = y.to(device)
+        print(f"Epoch {epoch}")
+        valid_z, valid_y = eval_saver.read_eval_func("valid", epoch) # to make sure the file is there.
+        full_valid_z, full_valid_y = eval_saver.read_eval_func("full_valid", epoch)
 
-            x_hat, z = model(x, return_latent=True)
-            loss = criterion(x_hat, x)
-            train_loss += loss.item()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=5, norm_type=2)
-            optimizer.step()
-            if eval_train: 
-                z_list.append(z.detach().cpu().numpy())
-                y_list.append(y.detach().cpu().numpy())
+        valid_res = kmeans_evaluate(valid_z, valid_y, n_clusters=50, 
+                                    epoch=epoch, model_save_dir=model_save_dir, name="valid")
+        full_valid_res = kmeans_evaluate(full_valid_z, full_valid_y, n_clusters=50, 
+                                         epoch=epoch, model_save_dir=model_save_dir, name="full_valid")
 
-        train_losses.append(train_loss / train_num)
-        if eval_train: 
-            z_all, y_all = concat_func(z_list, y_list)
-            eval_saver.save_eval_func(z_all, y_all, "train", epoch, save_eval)
-            on_site_eval_func(z_all, y_all, train_accs, on_site_eval)
-        if save_model: 
-            last_model_name = f"{epoch}.pt"
-            torch.save(model.state_dict(), os.path.join(model_save_dir, last_model_name))
-
-        # Target Eval
-        model.eval()
-        valid_loss = 0.
-        valid_num = len(valid_loader_1)
-        z_list, y_list = [], []
-        for idx, (x, y) in enumerate(valid_loader_1):
-            x = x.to(device)
-            y = y.to(device)
-
-            x_hat, z = model(x, return_latent=True)
-            loss = criterion(x_hat, x)
-            valid_loss += loss.item()
-            z_list.append(z.detach().cpu().numpy())
-            y_list.append(y.detach().cpu().numpy())
-
-        avg_valid_loss = valid_loss / valid_num
-        valid_losses.append(avg_valid_loss)
-        z_all, y_all = concat_func(z_list, y_list)
-        eval_saver.save_eval_func(z_all, y_all, "valid", epoch, save_eval)
-        on_site_eval_func(z_all, y_all, valid_accs, on_site_eval)
-        
-        if avg_valid_loss < best_valid_loss: 
-            best_valid_loss = avg_valid_loss
-            best_valid_loss_epoch = epoch
-
-        # Full Eval
-        model.eval()
-        full_valid_loss = 0.
-        full_valid_num = len(valid_loader_2)
-        z_list, y_list = [], []
-        for idx, (x, y) in enumerate(valid_loader_2):
-            x = x.to(device)
-            y = y.to(device)
-
-            x_hat, z = model(x, return_latent=True)
-            loss = criterion(x_hat, x)
-            full_valid_loss += loss.item()
-            z_list.append(z.detach().cpu().numpy())
-            y_list.append(y.detach().cpu().numpy())
-
-        full_valid_losses.append(full_valid_loss / full_valid_num)
-        z_all, y_all = concat_func(z_list, y_list)
-        eval_saver.save_eval_func(z_all, y_all, "full_valid", epoch, save_eval)
-        on_site_eval_func(z_all, y_all, full_valid_accs, on_site_eval)
-
-        train_losses.save()
-        valid_losses.save()
-        full_valid_losses.save()
-        train_accs.save()
+        valid_accs.append(valid_res["kmeans_acc"])
+        valid_sils.append(valid_res["silhouette"])
+        valid_aris.append(valid_res["adjusted_rand_index"])
+        valid_dbis.append(valid_res["davies_bouldin_score"])
+        full_valid_accs.append(full_valid_res["kmeans_acc"])
+        full_valid_sils.append(full_valid_res["silhouette"])
+        full_valid_aris.append(full_valid_res["adjusted_rand_index"])
+        full_valid_dbis.append(full_valid_res["davies_bouldin_score"])
         valid_accs.save()
         full_valid_accs.save()
-
-        if epoch % 10 == 0:
-            draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get()), 
-                                    accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
-                                    epoch=str(epoch), 
-                                    save=True, 
-                                    save_name=f"{model_save_dir}/vis.png")
-
-    # draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get()), 
-    #                                 accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
-    #                                 epoch=str(BASE + preepochs - 1), 
-    #                                 save=True, 
-    #                                 save_name=f"{model_save_dir}/vis.png")
-    
-    # Pre Model Best
-    special_recs.append(("preval_epoch", best_valid_loss_epoch))
-    special_recs.save()
+        valid_sils.save()
+        full_valid_sils.save()
+        valid_aris.save()
+        full_valid_aris.save()
+        valid_dbis.save()
+        full_valid_dbis.save()
 
     # Train (II)
     BASE = BASE + preepochs
-    for epoch in range(BASE, BASE + postepochs):
-        model.train()
-        train_loss = 0.
-        train_num = len(train_loader_2)    # train_loader
-        z_list, y_list = [], []
-        for idx, (x, y) in enumerate(train_loader_2):
-            optimizer.zero_grad()
-            x = x.to(device)
-            y = y.to(device)
+    real_postepochs = 15
+    for epoch in range(BASE, BASE + real_postepochs):
+        print(f"Epoch {epoch}")
+        valid_z, valid_y = eval_saver.read_eval_func("valid", epoch) # to make sure the file is there.
+        full_valid_z, full_valid_y = eval_saver.read_eval_func("valid", epoch)
 
-            x_hat, z = model(x, return_latent=True)
-            loss = criterion(x_hat, x)
-            train_loss += loss.item()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=5, norm_type=2)
-            optimizer.step()
-            if eval_train: 
-                z_list.append(z.detach().cpu().numpy())
-                y_list.append(y.detach().cpu().numpy())
+        valid_res = kmeans_evaluate(valid_z, valid_y, n_clusters=50, 
+                                    epoch=epoch, model_save_dir=model_save_dir, name="valid")
+        full_valid_res = kmeans_evaluate(full_valid_z, full_valid_y, n_clusters=50, 
+                                         epoch=epoch, model_save_dir=model_save_dir, name="full_valid")
 
-        train_losses.append(train_loss / train_num)
-        if eval_train: 
-            z_all, y_all = concat_func(z_list, y_list)
-            eval_saver.save_eval_func(z_all, y_all, "train", epoch, save_eval)
-            on_site_eval_func(z_all, y_all, train_accs, on_site_eval)
-        if save_model: 
-            last_model_name = f"{epoch}.pt"
-            torch.save(model.state_dict(), os.path.join(model_save_dir, last_model_name))
-
-        # Target Eval
-        model.eval()
-        valid_loss = 0.
-        valid_num = len(valid_loader_2)
-        z_list, y_list = [], []
-        for idx, (x, y) in enumerate(valid_loader_2):
-            x = x.to(device)
-            y = y.to(device)
-
-            x_hat, z = model(x, return_latent=True)
-            loss = criterion(x_hat, x)
-            valid_loss += loss.item()
-            z_list.append(z.detach().cpu().numpy())
-            y_list.append(y.detach().cpu().numpy())
-
-
-        avg_valid_loss = valid_loss / valid_num
-        valid_losses.append(avg_valid_loss)
-        full_valid_losses.append(avg_valid_loss)
-        z_all, y_all = concat_func(z_list, y_list)
-        eval_saver.save_eval_func(z_all, y_all, "valid", epoch, save_eval) # to save storage, we will not save the same data twice. 
-        on_site_eval_func_multi(z_all, y_all, [valid_accs, full_valid_accs], on_site_eval)
-        
-        if avg_valid_loss < best_valid_loss: 
-            best_valid_loss = avg_valid_loss
-            best_valid_loss_epoch = epoch
-
-        train_losses.save()
-        valid_losses.save()
-        full_valid_losses.save()
-        train_accs.save()
+        valid_accs.append(valid_res["kmeans_acc"])
+        valid_sils.append(valid_res["silhouette"])
+        valid_aris.append(valid_res["adjusted_rand_index"])
+        valid_dbis.append(valid_res["davies_bouldin_score"])
+        full_valid_accs.append(full_valid_res["kmeans_acc"])
+        full_valid_sils.append(full_valid_res["silhouette"])
+        full_valid_aris.append(full_valid_res["adjusted_rand_index"])
+        full_valid_dbis.append(full_valid_res["davies_bouldin_score"])
         valid_accs.save()
         full_valid_accs.save()
+        valid_sils.save()
+        full_valid_sils.save()
+        valid_aris.save()
+        full_valid_aris.save()
+        valid_dbis.save()
+        full_valid_dbis.save()
 
-        if epoch % 10 == 0:
-            draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get()), 
-                                    accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
-                                    epoch=str(epoch), 
-                                    save=True, 
-                                    save_name=f"{model_save_dir}/vis.png")
-
-    draw_learning_curve_and_accuracy(losses=(train_losses.get(), valid_losses.get(), full_valid_losses.get()), 
-                                    accs=(train_accs.get(), valid_accs.get(), full_valid_accs.get()),
-                                    epoch=str(BASE + postepochs - 1), 
-                                    save=True, 
-                                    save_name=f"{model_save_dir}/vis.png")
+    # draw_learning_curve_and_accuracy_new(data=[[valid_accs.get(), full_valid_accs.get()],
+    #                                            [valid_sils.get(), full_valid_sils.get()],
+    #                                               [valid_aris.get(), full_valid_aris.get()]],
+    #                                 task_names=["KmeansAcc", "Silhouette", "AdjRandIdx"],
+    #                                 type_names=["Valid", "FullValid"],
+    #                                 epoch=str(BASE + postepochs - 1), 
+    #                                 save=True, 
+    #                                 save_name=f"{model_save_dir}/vis_acc.png")
     
-    # Post Model Best
-    special_recs.append(("postval_epoch", best_valid_loss_epoch))
-    special_recs.save()
+    # draw_learning_curve_and_accuracy(accs=(valid_dbis.get(), full_valid_dbis.get()),
+    #                                 epoch=str(BASE + real_postepochs - 1),
+    #                                 save=True,
+    #                                 save_name=f"{model_save_dir}/vis_dbi.png")
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser(description='argparse')
@@ -555,6 +482,7 @@ if __name__ == "__main__":
             runnumber = args.runnumber
             # model_types = ['large', 'reslin', 'lstm']
             for preepoch in [15]: # 10, 15, 20, 25, 30, 0, , 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60
+                print(f"Model {args.model}, PreEpoch {preepoch}, PreType {args.pretype}")
             # for model_type in model_types: 
                 run_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select, 
                          preepochs=preepoch, postepochs=(120 - preepoch), save_model=False)

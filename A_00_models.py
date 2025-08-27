@@ -171,7 +171,7 @@ class CNNAutoencoder(nn.Module):
     - Decoder: linear + three CNN blocks (mirrored)
     - get_representation(x): returns the output of encoder linear
     """
-    def __init__(self, input_shape, hidden_dim=256, n_filter_base=4, n_filter_exp=2, dropout_rate=0.5):
+    def __init__(self, input_shape, hidden_dim=128, n_filter_base=4, n_filter_exp=2, dropout_rate=0.5):
         super().__init__()
 
         n_filter_1 = pow(n_filter_base, n_filter_exp)

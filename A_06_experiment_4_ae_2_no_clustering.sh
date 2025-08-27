@@ -32,18 +32,22 @@ for (( i=1; i<=5; i++ )); do
     # Loop over each combination of arguments
     # python A_04_experiment_4_ae_2.py -ts "$ts-$i" -dp
     for p in "${ps[@]}"; do
+        echo "Starting p loop $p"
         for s in "${ss[@]}"; do
             for m in "${ms[@]}"; do
+                echo "Starting model $m"
                 # Randomly select a GPU between 0 and 8
                 gpu=0
                 # post=$((55 - pre))
 
                 # Run the Python script with the current combination of arguments in the background
-                python A_04_experiment_4_ae_2.py -ts "$ts-$i" -p "$p" -s "$s" -m "$m" -gpu "$gpu" -rn "$i" &
+                python A_06_experiment_4_ae_2_no_clustering.py -ts "$ts-$i" -p "$p" -s "$s" -m "$m" -gpu "$gpu" -rn "$i" &
+                wait
+                echo "Finished model $m"
             done
         done
+        echo "Finished p loop $p"
     done
     # Wait for all background processes to finish
-    wait
     echo "Finished outer loop $i"
 done
