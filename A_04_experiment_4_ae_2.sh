@@ -11,14 +11,14 @@ generate_random_number() {
 }
 
 # Arrays of options for each argument
-ps=('l' 'h') # 'h'
-ms=('cnn') # 'reslin' 'lstm'
+ps=('l') # 'h'
+ms=('cnn' 'reslin' 'lstm') # 'reslin' 'lstm'
 pres=(0 1 2 3 4 5 10 15 20 25 30)
 ss=('full') # 
 
 # Generate a 10-digit random number
 # ts=$(date +"%m%d%H%M%S")
-ts="0823122642"
+ts="0905105630"
 # ts="0324233831"
 # ts="0813184725"
 # ts="0827104709"
@@ -27,7 +27,7 @@ echo "Timestamp: $ts"
 # ts="0121181130"
 
 # Loop from 1 to 10, incrementing by 1
-for (( i=1; i<=5; i++ )); do
+for (( i=3; i<=10; i++ )); do
     echo "Starting outer loop $i"
     # Loop over each combination of arguments
     # python A_04_experiment_4_ae_2.py -ts "$ts-$i" -dp
