@@ -361,7 +361,7 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
 
     # Train (II)
     BASE = BASE + preepochs
-    real_postepochs = 30
+    real_postepochs = postepochs
     for epoch in range(BASE, BASE + real_postepochs):
         print(f"Epoch {epoch}")
         valid_z, valid_y = eval_saver.read_eval_func("valid", epoch) # to make sure the file is there.
@@ -479,11 +479,10 @@ if __name__ == "__main__":
             torch.cuda.set_device(args.gpu)
             runnumber = args.runnumber
             # model_types = ['large', 'reslin', 'lstm']
-            for preepoch in [0]: # 10, 15, 20, 25, 30, 0, , 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60
+            for preepoch in [0, 15]: # 10, 15, 20, 25, 30, 0, , 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60
                 print(f"Model {args.model}, PreEpoch {preepoch}, PreType {args.pretype}")
                 if preepoch == 0 and args.pretype != "l": 
                     print("Skip hf for 0 preepoch")
                     continue
-            # for model_type in model_types: 
                 run_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select, 
-                         preepochs=preepoch, postepochs=(120 - preepoch), save_model=False)
+                         preepochs=preepoch, postepochs=(30 - preepoch), save_model=False)
