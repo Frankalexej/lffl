@@ -38,46 +38,11 @@ import argparse
 # Data Loader
 def load_data(type="f", sel="full", load="train"):
     # Load MV_config
-    # with open(os.path.join(src_, "mv_config_20.pkl"), "rb") as file: 
-    #     mv_config = pickle.load(file)
+    with open(os.path.join(src_, "mv_config_20.pkl"), "rb") as file: 
+        mv_config = pickle.load(file)
 
-    # normalize_mean, normalize_std = mv_config["mean"], mv_config["std"]
+    normalize_mean, normalize_std = mv_config["mean"], mv_config["std"]
 
-    # if type == "l":
-    #     mytrans = nn.Sequential(
-    #         Padder(sample_rate=TrainingConfigs.REC_SAMPLE_RATE, pad_len_ms=250, noise_level=1e-4), 
-    #         XpassFilter(cut_off_upper=500),
-    #         torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
-    #                                             n_mels=TrainingConfigs.N_MELS, 
-    #                                             n_fft=TrainingConfigs.N_FFT, 
-    #                                             hop_length=TrainingConfigs.HOP_LENGTH, 
-    #                                             power=2), 
-    #         torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-    #         NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
-    #     )
-    # elif type == "h": 
-    #     mytrans = nn.Sequential(
-    #         Padder(sample_rate=TrainingConfigs.REC_SAMPLE_RATE, pad_len_ms=250, noise_level=1e-4), 
-    #         XpassFilter(cut_off_upper=10000, cut_off_lower=4000),
-    #         torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
-    #                                             n_mels=TrainingConfigs.N_MELS, 
-    #                                             n_fft=TrainingConfigs.N_FFT, 
-    #                                             hop_length=TrainingConfigs.HOP_LENGTH, 
-    #                                             power=2), 
-    #         torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-    #         NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
-    #     )
-    # else: 
-    #     mytrans = nn.Sequential(
-    #         Padder(sample_rate=TrainingConfigs.REC_SAMPLE_RATE, pad_len_ms=250, noise_level=1e-4), 
-    #         torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
-    #                                             n_mels=TrainingConfigs.N_MELS, 
-    #                                             n_fft=TrainingConfigs.N_FFT, 
-    #                                             hop_length=TrainingConfigs.HOP_LENGTH, 
-    #                                             power=2), 
-    #         torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-    #         NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
-    #     )
     if type == "l":
         mytrans = nn.Sequential(
             Padder(sample_rate=TrainingConfigs.REC_SAMPLE_RATE, pad_len_ms=250, noise_level=1e-4), 
@@ -85,10 +50,10 @@ def load_data(type="f", sel="full", load="train"):
             torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
                                                 n_mels=TrainingConfigs.N_MELS, 
                                                 n_fft=TrainingConfigs.N_FFT, 
-                                                hop_length=TrainingConfigs.HOP_LENGTH,
+                                                hop_length=TrainingConfigs.HOP_LENGTH, 
                                                 power=2), 
             torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-            NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+            NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
         )
     elif type == "h": 
         mytrans = nn.Sequential(
@@ -97,10 +62,10 @@ def load_data(type="f", sel="full", load="train"):
             torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
                                                 n_mels=TrainingConfigs.N_MELS, 
                                                 n_fft=TrainingConfigs.N_FFT, 
-                                                hop_length=TrainingConfigs.HOP_LENGTH,
+                                                hop_length=TrainingConfigs.HOP_LENGTH, 
                                                 power=2), 
             torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-            NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+            NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
         )
     else: 
         mytrans = nn.Sequential(
@@ -108,11 +73,46 @@ def load_data(type="f", sel="full", load="train"):
             torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
                                                 n_mels=TrainingConfigs.N_MELS, 
                                                 n_fft=TrainingConfigs.N_FFT, 
-                                                hop_length=TrainingConfigs.HOP_LENGTH,
+                                                hop_length=TrainingConfigs.HOP_LENGTH, 
                                                 power=2), 
             torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-            NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+            NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
         )
+    # if type == "l":
+    #     mytrans = nn.Sequential(
+    #         Padder(sample_rate=TrainingConfigs.REC_SAMPLE_RATE, pad_len_ms=250, noise_level=1e-4), 
+    #         XpassFilter(cut_off_upper=500),
+    #         torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
+    #                                             n_mels=TrainingConfigs.N_MELS, 
+    #                                             n_fft=TrainingConfigs.N_FFT, 
+    #                                             hop_length=TrainingConfigs.HOP_LENGTH,
+    #                                             power=2), 
+    #         torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
+    #         NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+    #     )
+    # elif type == "h": 
+    #     mytrans = nn.Sequential(
+    #         Padder(sample_rate=TrainingConfigs.REC_SAMPLE_RATE, pad_len_ms=250, noise_level=1e-4), 
+    #         XpassFilter(cut_off_upper=10000, cut_off_lower=4000),
+    #         torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
+    #                                             n_mels=TrainingConfigs.N_MELS, 
+    #                                             n_fft=TrainingConfigs.N_FFT, 
+    #                                             hop_length=TrainingConfigs.HOP_LENGTH,
+    #                                             power=2), 
+    #         torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
+    #         NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+    #     )
+    # else: 
+    #     mytrans = nn.Sequential(
+    #         Padder(sample_rate=TrainingConfigs.REC_SAMPLE_RATE, pad_len_ms=250, noise_level=1e-4), 
+    #         torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
+    #                                             n_mels=TrainingConfigs.N_MELS, 
+    #                                             n_fft=TrainingConfigs.N_FFT, 
+    #                                             hop_length=TrainingConfigs.HOP_LENGTH,
+    #                                             power=2), 
+    #         torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
+    #         NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+    #     )
     with open(os.path.join(src_, "no-stress-seg.dict"), "rb") as file:
         # Load the object from the file
         mylist = pickle.load(file)
@@ -589,7 +589,11 @@ if __name__ == "__main__":
             torch.cuda.set_device(args.gpu)
             runnumber = args.runnumber
             # model_types = ['large', 'reslin', 'lstm']
-            for preepoch in [0]: # 10, 15, 20, 25, 30, 0, , 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60
+            for preepoch in [0, 15]: # 10, 15, 20, 25, 30, 0, , 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60
             # for model_type in model_types: 
+                print(f"Model {args.model}, PreEpoch {preepoch}, PreType {args.pretype}")
+                if preepoch == 0 and args.pretype != "l": 
+                    print("Skip hf for 0 preepoch")
+                    continue
                 run_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select, 
                          preepochs=preepoch, postepochs=(30 - preepoch), save_model=False)
