@@ -209,6 +209,18 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     valid_correct = 0
     valid_total = 0
     for idx, (x, y) in enumerate(valid_loader_1):
+        """
+        Frank note: I haven't changed this yet because I am not yet sure which one was the newest. 
+        However, modification would be straightforward: for the training and testing, we do not need to change the codes; instead, we change the data loader and make the x and y to be the same. This way, accompanied with the changed model, would just work. 
+
+        The pred = model.predict_on_output(y_hat) and the following two lines should be changed to clustering evaluation. This would be saved as accuracy. 
+
+        NOTE: we need to use table to store the data for each token's real and clustered label (!!!!!!! MAYBE IT WILL NOT GIVE A LABEL. IN THAT CASE WE WOULD JUST INCLUDE THE WHOLE AND NOT INDIVIDUAL TOKENS.)
+
+        The modification is the same for all such loops, including training and testing ones. 
+
+        TODO: modify each loop: change input shape to (x, y, target); save hidden representation; 
+        """
         x = x.to(device)
         y = y.to(device)
 
@@ -216,9 +228,9 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
         loss = criterion(y_hat, y)
         valid_loss += loss.item()
 
-        pred = model.predict_on_output(y_hat)
+        pred = model.predict_on_output(y_hat) # change to clustering
 
-        valid_total += y_hat.size(0)
+        valid_total += y_hat.size(0)    # clustering score
         valid_correct += (pred == y).sum().item()
 
     special_recs.append(("notrain-target-loss", valid_loss / valid_num))

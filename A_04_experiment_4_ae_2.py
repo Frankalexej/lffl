@@ -21,10 +21,10 @@ import random
 from torchinfo import summary
 import torch.nn.functional as F
 from torch.nn import init
-from H_10_models import SmallNetwork, MediumNetwork, LargeNetwork, ResLinearNetwork, LSTMNetwork
+from A_00_models import CNNAutoencoder, ResLinearAutoencoder, LSTMAutoencoder
 from model_configs import ModelDimConfigs, TrainingConfigs
 from misc_tools import get_timestamp, ARPABET
-from model_dataset import DS_Tools, Padder, TokenMap, NormalizerKeepShape
+from model_dataset import DS_Tools, Padder, TokenMap, NormalizerKeepShapeManual, NormalizerKeepShape
 from model_dataset import SingleRecSelectBalanceDatasetPrecombine as ThisDataset
 from model_filter import XpassFilter
 from paths import *
@@ -37,6 +37,12 @@ import argparse
 
 # Data Loader
 def load_data(type="f", sel="full", load="train"):
+    # Load MV_config
+    with open(os.path.join(src_, "mv_config_20.pkl"), "rb") as file: 
+        mv_config = pickle.load(file)
+
+    normalize_mean, normalize_std = mv_config["mean"], mv_config["std"]
+
     if type == "l":
         mytrans = nn.Sequential(
             Padder(sample_rate=TrainingConfigs.REC_SAMPLE_RATE, pad_len_ms=250, noise_level=1e-4), 
@@ -44,9 +50,10 @@ def load_data(type="f", sel="full", load="train"):
             torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
                                                 n_mels=TrainingConfigs.N_MELS, 
                                                 n_fft=TrainingConfigs.N_FFT, 
+                                                hop_length=TrainingConfigs.HOP_LENGTH, 
                                                 power=2), 
             torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-            NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+            NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
         )
     elif type == "h": 
         mytrans = nn.Sequential(
@@ -55,9 +62,10 @@ def load_data(type="f", sel="full", load="train"):
             torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
                                                 n_mels=TrainingConfigs.N_MELS, 
                                                 n_fft=TrainingConfigs.N_FFT, 
+                                                hop_length=TrainingConfigs.HOP_LENGTH, 
                                                 power=2), 
             torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-            NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+            NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
         )
     else: 
         mytrans = nn.Sequential(
@@ -65,10 +73,46 @@ def load_data(type="f", sel="full", load="train"):
             torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
                                                 n_mels=TrainingConfigs.N_MELS, 
                                                 n_fft=TrainingConfigs.N_FFT, 
+                                                hop_length=TrainingConfigs.HOP_LENGTH, 
                                                 power=2), 
             torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
-            NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+            NormalizerKeepShapeManual(mean=normalize_mean, std=normalize_std)
         )
+    # if type == "l":
+    #     mytrans = nn.Sequential(
+    #         Padder(sample_rate=TrainingConfigs.REC_SAMPLE_RATE, pad_len_ms=250, noise_level=1e-4), 
+    #         XpassFilter(cut_off_upper=500),
+    #         torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
+    #                                             n_mels=TrainingConfigs.N_MELS, 
+    #                                             n_fft=TrainingConfigs.N_FFT, 
+    #                                             hop_length=TrainingConfigs.HOP_LENGTH,
+    #                                             power=2), 
+    #         torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
+    #         NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+    #     )
+    # elif type == "h": 
+    #     mytrans = nn.Sequential(
+    #         Padder(sample_rate=TrainingConfigs.REC_SAMPLE_RATE, pad_len_ms=250, noise_level=1e-4), 
+    #         XpassFilter(cut_off_upper=10000, cut_off_lower=4000),
+    #         torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
+    #                                             n_mels=TrainingConfigs.N_MELS, 
+    #                                             n_fft=TrainingConfigs.N_FFT, 
+    #                                             hop_length=TrainingConfigs.HOP_LENGTH,
+    #                                             power=2), 
+    #         torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
+    #         NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+    #     )
+    # else: 
+    #     mytrans = nn.Sequential(
+    #         Padder(sample_rate=TrainingConfigs.REC_SAMPLE_RATE, pad_len_ms=250, noise_level=1e-4), 
+    #         torchaudio.transforms.MelSpectrogram(TrainingConfigs.REC_SAMPLE_RATE, 
+    #                                             n_mels=TrainingConfigs.N_MELS, 
+    #                                             n_fft=TrainingConfigs.N_FFT, 
+    #                                             hop_length=TrainingConfigs.HOP_LENGTH,
+    #                                             power=2), 
+    #         torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80), 
+    #         NormalizerKeepShape(NormalizerKeepShape.norm_mvn)
+    #     )
     with open(os.path.join(src_, "no-stress-seg.dict"), "rb") as file:
         # Load the object from the file
         mylist = pickle.load(file)
@@ -137,7 +181,50 @@ def draw_learning_curve_and_accuracy(losses, accs, epoch="", best_val=None, save
     if save: 
         plt.savefig(save_name)
 
-def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full", preepochs=20, postepochs=20): 
+def kmeans_evaluate(X, Y, n_clusters=None, n_init=20, random_state=0, compute_sil=True):
+    if n_clusters is None:
+        n_clusters = len(np.unique(Y))
+    km = KMeans(n_clusters=n_clusters, n_init=n_init, random_state=random_state)
+    cluster_ids = km.fit_predict(X)
+    acc = clustering_accuracy(Y, cluster_ids)
+    sil = silhouette_score(X, cluster_ids) if compute_sil and len(np.unique(cluster_ids)) > 1 else None
+    return {
+        "kmeans_acc": acc,
+        "silhouette": sil,
+        "cluster_counts": np.bincount(cluster_ids, minlength=n_clusters)
+    }
+def concat_func(z, y): 
+    return np.concatenate(z, axis=0), np.concatenate(y, axis=0)
+
+class EvalSaver: 
+    def __init__(self, model_save_dir): 
+        self.model_save_dir = model_save_dir
+        
+    def save_eval_func(self, z, y, name, epoch, save_eval=True): 
+        if save_eval: 
+            np.save(os.path.join(self.model_save_dir, f"{epoch:04d}_{name}_z.npy"), z)
+            np.save(os.path.join(self.model_save_dir, f"{epoch:04d}_{name}_y.npy"), y)
+
+def special_on_site_eval_func(z, y, rec, name, on_site_eval): 
+    if on_site_eval: 
+        eval_res = kmeans_evaluate(z, y)
+        acc = eval_res["kmeans_acc"]
+        rec.append(("notrain-target-acc", acc))
+
+def on_site_eval_func(z, y, rec, on_site_eval): 
+    if on_site_eval: 
+        eval_res = kmeans_evaluate(z, y)
+        acc = eval_res["kmeans_acc"]
+        rec.append(acc)
+
+def on_site_eval_func_multi(z, y, recs, on_site_eval): 
+    if on_site_eval: 
+        eval_res = kmeans_evaluate(z, y)
+        acc = eval_res["kmeans_acc"]
+        for rec in recs: 
+            rec.append(acc)
+
+def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full", preepochs=20, postepochs=20, on_site_eval=False, save_eval=True, eval_train=False, save_model=False): 
     model_save_dir = os.path.join(hyper_dir, f"{model_type}-{preepochs}-{postepochs}", sel, f"{pretype}{posttype}")
     mk(model_save_dir)
 
@@ -154,31 +241,31 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
 
     special_recs = DictRecorder(os.path.join(model_save_dir, "special.hst"))
 
+    eval_saver = EvalSaver(model_save_dir)
+
     # Initialize Model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    criterion = nn.CrossEntropyLoss()
-    if model_type == "small":
-        model = SmallNetwork()
-    elif model_type == "medium":
-        model = MediumNetwork()
-    elif model_type == "large": 
-        model = LargeNetwork()
+    criterion = nn.MSELoss()
+    input_shape = (128, 1, 64, 32)
+    if model_type == "cnn": 
+        model = CNNAutoencoder(input_shape=input_shape)
     elif model_type == "reslin": 
-        model = ResLinearNetwork()
+        model = ResLinearAutoencoder(input_shape=input_shape)
     elif model_type == "lstm": 
-        model = LSTMNetwork()
+        model = LSTMAutoencoder()
     else:
         raise Exception("Model not defined! ")
     # model= nn.DataParallel(model)
     # model = nn.DataParallel(model, device_ids=[0, 1])
     model.to(device)
+    # NOTE: 20240819 changed lr from 1e-3 to 1e-5 so as to observe learning differences (potentially)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     model_str = str(model)
     model_txt_path = os.path.join(model_save_dir, "model.txt")
     with open(model_txt_path, "w") as f:
         f.write(model_str)
         f.write("\n")
-        f.write(str(summary(model, input_size=(128, 1, 64, 21))))
+        f.write(str(summary(model, input_size=input_shape)))
 
     # Load Data (I&II)
     train_loader_1 = load_data(type=pretype, sel="full", load="train")
@@ -199,46 +286,45 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     model.eval()
     valid_loss = 0.
     valid_num = len(valid_loader_1)
-    valid_correct = 0
-    valid_total = 0
+    z_list, y_list = [], []
     for idx, (x, y) in enumerate(valid_loader_1):
+        # NOTE: still, x is data, y is label. But instead we will output x_hat, not y_hat. 
         x = x.to(device)
         y = y.to(device)
 
-        y_hat = model(x)
-        loss = criterion(y_hat, y)
+        x_hat, z = model(x, return_latent=True)
+        loss = criterion(x_hat, x) # NOTE: now compare with data (x), not label (y). 
         valid_loss += loss.item()
 
-        pred = model.predict_on_output(y_hat)
-
-        valid_total += y_hat.size(0)
-        valid_correct += (pred == y).sum().item()
+        z_list.append(z.detach().cpu().numpy())
+        y_list.append(y.detach().cpu().numpy())
 
     special_recs.append(("notrain-target-loss", valid_loss / valid_num))
-    special_recs.append(("notrain-target-acc", valid_correct / valid_total))
+    z_all, y_all = concat_func(z_list, y_list)
+    eval_saver.save_eval_func(z_all, y_all, "valid", 9999, save_eval)
+    special_on_site_eval_func(z_all, y_all, special_recs, "notrain-target-acc", on_site_eval)
     special_recs.save()
 
     # Full Eval
     model.eval()
-    full_valid_loss = 0.
+    full_valid_loss = 0.0
     full_valid_num = len(valid_loader_2)
-    full_valid_correct = 0
-    full_valid_total = 0
+    z_list, y_list = [], []
     for idx, (x, y) in enumerate(valid_loader_2):
         x = x.to(device)
         y = y.to(device)
 
-        y_hat = model(x)
-        loss = criterion(y_hat, y)
+        x_hat, z = model(x, return_latent=True)
+        loss = criterion(x_hat, x)
         full_valid_loss += loss.item()
-
-        pred = model.predict_on_output(y_hat)
-
-        full_valid_total += y_hat.size(0)
-        full_valid_correct += (pred == y).sum().item()
+        
+        z_list.append(z.detach().cpu().numpy())
+        y_list.append(y.detach().cpu().numpy())
 
     special_recs.append(("notrain-full-loss", full_valid_loss / full_valid_num))
-    special_recs.append(("notrain-full-acc", full_valid_correct / full_valid_total))
+    z_all, y_all = concat_func(z_list, y_list)
+    eval_saver.save_eval_func(z_all, y_all, "full_valid", 9999, save_eval)
+    special_on_site_eval_func(z_all, y_all, special_recs, "notrain-full-acc", on_site_eval)
     special_recs.save()
 
     # Train (I)
@@ -249,87 +335,77 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     for epoch in range(BASE, BASE + preepochs):
         model.train()
         train_loss = 0.
-        # train_num = len(train_loader_1)    # train_loader
-        train_num = 0
-        train_correct = 0
-        train_total = 0
+        train_num = len(train_loader_1)    # train_loader
+        z_list, y_list = [], []
         for idx, (x, y) in enumerate(train_loader_1):
             optimizer.zero_grad()
             x = x.to(device)
             # y = torch.tensor(y, device=device)
             y = y.to(device)
 
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
+            x_hat, z = model(x, return_latent=True)
+            loss = criterion(x_hat, x)
             train_loss += loss.item()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=5, norm_type=2)
             optimizer.step()
-            pred = model.predict_on_output(y_hat)
-            train_total += y_hat.size(0)
-            train_correct += (pred == y).sum().item()
-            train_num += 1
-            # draw_progress_bar(idx, train_num, title="Train")
+            if eval_train: 
+                z_list.append(z.detach().cpu().numpy())
+                y_list.append(y.detach().cpu().numpy())
 
-            if (idx + 1) % 50 == 0: 
-                train_losses.append(train_loss / train_num)
-                train_accs.append(train_correct / train_total)
-                # set all to 0 after recording the data
-                train_loss = 0
-                train_num = 0
-                train_correct = 0
-                train_total = 0
+        train_losses.append(train_loss / train_num)
+        if eval_train: 
+            z_all, y_all = concat_func(z_list, y_list)
+            eval_saver.save_eval_func(z_all, y_all, "train", epoch, save_eval)
+            on_site_eval_func(z_all, y_all, train_accs, on_site_eval)
+        if save_model: 
+            last_model_name = f"{epoch}.pt"
+            torch.save(model.state_dict(), os.path.join(model_save_dir, last_model_name))
 
-                # Target Eval
-                model.eval()
-                valid_loss = 0.
-                valid_num = len(valid_loader_1)
-                valid_correct = 0
-                valid_total = 0
-                for idx, (x, y) in enumerate(valid_loader_1):
-                    x = x.to(device)
-                    y = y.to(device)
+        # Target Eval
+        model.eval()
+        valid_loss = 0.
+        valid_num = len(valid_loader_1)
+        z_list, y_list = [], []
+        for idx, (x, y) in enumerate(valid_loader_1):
+            x = x.to(device)
+            y = y.to(device)
 
-                    y_hat = model(x)
-                    loss = criterion(y_hat, y)
-                    valid_loss += loss.item()
+            x_hat, z = model(x, return_latent=True)
+            loss = criterion(x_hat, x)
+            valid_loss += loss.item()
+            z_list.append(z.detach().cpu().numpy())
+            y_list.append(y.detach().cpu().numpy())
 
-                    pred = model.predict_on_output(y_hat)
+        avg_valid_loss = valid_loss / valid_num
+        valid_losses.append(avg_valid_loss)
+        z_all, y_all = concat_func(z_list, y_list)
+        eval_saver.save_eval_func(z_all, y_all, "valid", epoch, save_eval)
+        on_site_eval_func(z_all, y_all, valid_accs, on_site_eval)
+        
+        if avg_valid_loss < best_valid_loss: 
+            best_valid_loss = avg_valid_loss
+            best_valid_loss_epoch = epoch
 
-                    valid_total += y_hat.size(0)
-                    valid_correct += (pred == y).sum().item()
+        # Full Eval
+        model.eval()
+        full_valid_loss = 0.
+        full_valid_num = len(valid_loader_2)
+        z_list, y_list = [], []
+        for idx, (x, y) in enumerate(valid_loader_2):
+            x = x.to(device)
+            y = y.to(device)
 
-                avg_valid_loss = valid_loss / valid_num
-                valid_losses.append(avg_valid_loss)
-                valid_accs.append(valid_correct / valid_total)
-                if avg_valid_loss < best_valid_loss: 
-                    best_valid_loss = avg_valid_loss
-                    best_valid_loss_epoch = epoch
+            x_hat, z = model(x, return_latent=True)
+            loss = criterion(x_hat, x)
+            full_valid_loss += loss.item()
+            z_list.append(z.detach().cpu().numpy())
+            y_list.append(y.detach().cpu().numpy())
 
-                # Full Eval
-                model.eval()
-                full_valid_loss = 0.
-                full_valid_num = len(valid_loader_2)
-                full_valid_correct = 0
-                full_valid_total = 0
-                for idx, (x, y) in enumerate(valid_loader_2):
-                    x = x.to(device)
-                    y = y.to(device)
-
-                    y_hat = model(x)
-                    loss = criterion(y_hat, y)
-                    full_valid_loss += loss.item()
-
-                    pred = model.predict_on_output(y_hat)
-
-                    full_valid_total += y_hat.size(0)
-                    full_valid_correct += (pred == y).sum().item()
-
-                full_valid_losses.append(full_valid_loss / full_valid_num)
-                full_valid_accs.append(full_valid_correct / full_valid_total)
-
-        last_model_name = f"{epoch}.pt"
-        torch.save(model.state_dict(), os.path.join(model_save_dir, last_model_name))
+        full_valid_losses.append(full_valid_loss / full_valid_num)
+        z_all, y_all = concat_func(z_list, y_list)
+        eval_saver.save_eval_func(z_all, y_all, "full_valid", epoch, save_eval)
+        on_site_eval_func(z_all, y_all, full_valid_accs, on_site_eval)
 
         train_losses.save()
         valid_losses.save()
@@ -360,67 +436,58 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     for epoch in range(BASE, BASE + postepochs):
         model.train()
         train_loss = 0.
-        # train_num = len(train_loader_2)    # train_loader
-        train_num = 0
-        train_correct = 0
-        train_total = 0
+        train_num = len(train_loader_2)    # train_loader
+        z_list, y_list = [], []
         for idx, (x, y) in enumerate(train_loader_2):
             optimizer.zero_grad()
             x = x.to(device)
             y = y.to(device)
 
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
+            x_hat, z = model(x, return_latent=True)
+            loss = criterion(x_hat, x)
             train_loss += loss.item()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=5, norm_type=2)
             optimizer.step()
-            pred = model.predict_on_output(y_hat)
-            train_total += y_hat.size(0)
-            train_correct += (pred == y).sum().item()
-            train_num += 1
-            # draw_progress_bar(idx, train_num, title="Train")
+            if eval_train: 
+                z_list.append(z.detach().cpu().numpy())
+                y_list.append(y.detach().cpu().numpy())
 
-            if (idx + 1) % 50 == 0: 
-                train_losses.append(train_loss / train_num)
-                train_accs.append(train_correct / train_total)
-                # set all to 0 after recording the data
-                train_loss = 0
-                train_num = 0
-                train_correct = 0
-                train_total = 0
+        train_losses.append(train_loss / train_num)
+        if eval_train: 
+            z_all, y_all = concat_func(z_list, y_list)
+            eval_saver.save_eval_func(z_all, y_all, "train", epoch, save_eval)
+            on_site_eval_func(z_all, y_all, train_accs, on_site_eval)
+        if save_model: 
+            last_model_name = f"{epoch}.pt"
+            torch.save(model.state_dict(), os.path.join(model_save_dir, last_model_name))
 
-                # Target Eval
-                model.eval()
-                valid_loss = 0.
-                valid_num = len(valid_loader_2)
-                valid_correct = 0
-                valid_total = 0
-                for idx, (x, y) in enumerate(valid_loader_2):
-                    x = x.to(device)
-                    y = y.to(device)
+        # Target Eval
+        model.eval()
+        valid_loss = 0.
+        valid_num = len(valid_loader_2)
+        z_list, y_list = [], []
+        for idx, (x, y) in enumerate(valid_loader_2):
+            x = x.to(device)
+            y = y.to(device)
 
-                    y_hat = model(x)
-                    loss = criterion(y_hat, y)
-                    valid_loss += loss.item()
-
-                    pred = model.predict_on_output(y_hat)
-
-                    valid_total += y_hat.size(0)
-                    valid_correct += (pred == y).sum().item()
+            x_hat, z = model(x, return_latent=True)
+            loss = criterion(x_hat, x)
+            valid_loss += loss.item()
+            z_list.append(z.detach().cpu().numpy())
+            y_list.append(y.detach().cpu().numpy())
 
 
-                avg_valid_loss = valid_loss / valid_num
-                valid_losses.append(avg_valid_loss)
-                full_valid_losses.append(avg_valid_loss)
-                valid_accs.append(valid_correct / valid_total)
-                full_valid_accs.append(valid_correct / valid_total)
-                if avg_valid_loss < best_valid_loss: 
-                    best_valid_loss = avg_valid_loss
-                    best_valid_loss_epoch = epoch
-
-        last_model_name = f"{epoch}.pt"
-        torch.save(model.state_dict(), os.path.join(model_save_dir, last_model_name))
+        avg_valid_loss = valid_loss / valid_num
+        valid_losses.append(avg_valid_loss)
+        full_valid_losses.append(avg_valid_loss)
+        z_all, y_all = concat_func(z_list, y_list)
+        eval_saver.save_eval_func(z_all, y_all, "valid", epoch, save_eval) # to save storage, we will not save the same data twice. 
+        on_site_eval_func_multi(z_all, y_all, [valid_accs, full_valid_accs], on_site_eval)
+        
+        if avg_valid_loss < best_valid_loss: 
+            best_valid_loss = avg_valid_loss
+            best_valid_loss_epoch = epoch
 
         train_losses.save()
         valid_losses.save()
@@ -456,6 +523,8 @@ if __name__ == "__main__":
     parser.add_argument('--select','-s',type=str, default="full", help='Select full, consonants or vowels')
     parser.add_argument('--preepochs','-pree',type=int, default=20, help='Number of epochs in pre-training')
     parser.add_argument('--postepochs','-poste',type=int, default=20, help='Number of epochs in post-training')
+    parser.add_argument('--runnumber','-rn',type=int, default=0, help='The run number')
+    
 
     args = parser.parse_args()
     RUN_TIMES = 1
@@ -482,6 +551,8 @@ if __name__ == "__main__":
             select_full = mylist
 
             mymap = TokenMap(mylist)
+            with open(os.path.join(model_save_dir, f"README.remarks"), "w") as remarks: 
+                remarks.write("Normal epoch; lr=1e-3; LargeNetwork, Reslin, LSTM; 012345 10 15 20 25 30; until 70 epochs")
 
             # NOTE: 20240813: decided to use very small number of training material
             # V1: 10% of original = 0.001
@@ -516,6 +587,13 @@ if __name__ == "__main__":
                 print(len(use_train_ds), len(use_valid_ds))
         else: 
             torch.cuda.set_device(args.gpu)
-            for preepoch in [0, 1, 2]: # , 2, 3, 4, 5, 10, 15, 20
+            runnumber = args.runnumber
+            # model_types = ['large', 'reslin', 'lstm']
+            for preepoch in [0, 15]: # 10, 15, 20, 25, 30, 0, , 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60
+            # for model_type in model_types: 
+                print(f"Model {args.model}, PreEpoch {preepoch}, PreType {args.pretype}")
+                if preepoch == 0 and args.pretype != "l": 
+                    print("Skip hf for 0 preepoch")
+                    continue
                 run_once(model_save_dir, model_type=args.model, pretype=args.pretype, posttype="f", sel=args.select, 
-                         preepochs=preepoch, postepochs=(3 - preepoch))
+                         preepochs=preepoch, postepochs=(30 - preepoch), save_model=False)

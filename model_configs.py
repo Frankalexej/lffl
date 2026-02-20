@@ -23,8 +23,10 @@ class TrainingConfigs:
     BATCH_SIZE = 32 # NOTE: 20240813 changed to 32 due to smaller data size. 
 
     REC_SAMPLE_RATE = 16000
-    N_FFT = 400
+    # N_FFT = 400
+    N_FFT = 512
     N_MELS = 64
+    HOP_LENGTH = 128
 
     N_MFCC = 13
 

@@ -155,6 +155,7 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     # Initialize Model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     criterion = nn.CrossEntropyLoss()
+    # NOTE: this should be changed. But we could instead use alias to keep this the same. 
     if model_type == "small":
         model = SmallNetwork()
     elif model_type == "medium":
@@ -196,6 +197,7 @@ def run_once(hyper_dir, model_type="large", pretype="f", posttype="f", sel="full
     valid_correct = 0
     valid_total = 0
     for idx, (x, y) in enumerate(valid_loader_1):
+        # NOTE: still, x is data, y is label. But instead we will output x_hat, not y_hat. 
         x = x.to(device)
         y = y.to(device)
 
